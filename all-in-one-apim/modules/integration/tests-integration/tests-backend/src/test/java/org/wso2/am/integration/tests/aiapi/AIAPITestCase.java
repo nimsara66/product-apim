@@ -41,20 +41,20 @@ import org.wso2.am.integration.clients.admin.api.dto.AIServiceProviderSummaryRes
 import org.wso2.am.integration.clients.publisher.api.v1.dto.APIDTO;
 import org.wso2.am.integration.clients.publisher.api.v1.dto.APIOperationPoliciesDTO;
 import org.wso2.am.integration.clients.publisher.api.v1.dto.OperationPolicyDTO;
-import org.wso2.am.integration.clients.store.api.v1.dto.APIKeyDTO;
 import org.wso2.am.integration.clients.store.api.v1.dto.ApplicationDTO;
-import org.wso2.am.integration.clients.store.api.v1.dto.ApplicationKeyGenerateRequestDTO;
 import org.wso2.am.integration.clients.store.api.v1.dto.SubscriptionDTO;
 import org.wso2.am.integration.test.utils.base.APIMIntegrationBaseTest;
 import org.wso2.am.integration.test.utils.base.APIMIntegrationConstants;
 import org.wso2.am.integration.test.utils.bean.APIThrottlingTier;
 import org.wso2.am.integration.test.utils.http.HTTPSClientUtils;
+import org.wso2.am.integration.tests.jwt.JWTGenerator;
 import org.wso2.am.integration.test.utils.MockServerUtils;
 import org.wso2.carbon.automation.engine.annotations.ExecutionEnvironment;
 import org.wso2.carbon.automation.engine.annotations.SetEnvironment;
 import org.wso2.carbon.automation.engine.context.TestUserMode;
 import org.wso2.carbon.automation.test.utils.common.TestConfigurationProvider;
 import org.wso2.carbon.automation.test.utils.http.client.HttpResponse;
+import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
 import javax.ws.rs.core.Response;
 import java.io.BufferedWriter;
@@ -297,11 +297,39 @@ public class AIAPITestCase extends APIMIntegrationBaseTest {
     }
 
     /**
+     * Test Unsecured AI API invocation with opaque API key
+     */
+    @Test(groups = {"wso2.am"}, description = "Test Unsecured AI API invocation with opaque key",
+            dependsOnMethods = "testUnsecuredAiApiInvocation")
+    public void testUnsecuredAiApiInvocationWithOpaqueKey() throws Exception {
+        String opaqueApiKey = restAPIStore.generateAPIKeys(applicationId, "PRODUCTION", 3600, null, null,
+                "testUnsecuredAiApiInvocationWithOpaqueKey").getApikey();
+
+        // Retry until the opaque key propagates to the gateway cache
+        Map<String, String> requestHeaders = new HashMap<>();
+        requestHeaders.put("ApiKey", opaqueApiKey);
+        requestHeaders.put("Content-Type", "application/json");
+        String invokeURL = getAPIInvocationURLHttp(UNSECURED_API_CONTEXT, API_VERSION_1_0_0) + MISTRAL_API_RESOURCE;
+        HttpResponse serviceResponse;
+        int counter = 1;
+        do {
+            Thread.sleep(1000L);
+            serviceResponse = HTTPSClientUtils.doPost(invokeURL, requestHeaders, mistralPayload);
+            counter++;
+        } while (serviceResponse.getResponseCode() != HttpStatus.SC_OK && counter < 25);
+
+        assertEquals(serviceResponse.getResponseCode(), HttpStatus.SC_OK,
+                "Unsecured AI API invocation with opaque key failed");
+        assertEquals(serviceResponse.getData(), model1Response,
+                "Unsecured AI API response mismatch with opaque key");
+    }
+
+    /**
      * Updates the created AI service provider with apikey auth configurations and verifies the update.
      * Ensures the updated provider is retrieved successfully and the configurations are correct.
      */
     @Test(groups = {"wso2.am"}, description = "Update AI Service Provider",
-            dependsOnMethods = "testUnsecuredAiApiInvocation")
+            dependsOnMethods = "testUnsecuredAiApiInvocationWithOpaqueKey")
     public void updateCustomAiServiceProvider() throws Exception {
         String originalDefinition = readFile(resourcePath + API_DEFINITION_FILE_NAME);
         File file = getTempFileWithContent(originalDefinition);
@@ -359,10 +387,38 @@ public class AIAPITestCase extends APIMIntegrationBaseTest {
     }
 
     /**
+     * Test Secured Mistral AI API invocation with opaque API key
+     */
+    @Test(groups = {"wso2.am"}, description = "Test Secured AI API invocation with opaque key",
+            dependsOnMethods = "testSecuredAiApiInvocation")
+    public void testSecuredAiApiInvocationWithOpaqueKey() throws Exception {
+        String opaqueApiKey = restAPIStore.generateAPIKeys(applicationId, "PRODUCTION", 3600, null, null,
+                "testSecuredAiApiInvocationWithOpaqueKey").getApikey();
+
+        // Retry until the opaque key propagates to the gateway cache
+        Map<String, String> requestHeaders = new HashMap<>();
+        requestHeaders.put("ApiKey", opaqueApiKey);
+        requestHeaders.put("Content-Type", "application/json");
+        String invokeURL = getAPIInvocationURLHttp(MISTRAL_API_CONTEXT, API_VERSION_1_0_0) + MISTRAL_API_RESOURCE;
+        HttpResponse serviceResponse;
+        int counter = 1;
+        do {
+            Thread.sleep(1000L);
+            serviceResponse = HTTPSClientUtils.doPost(invokeURL, requestHeaders, mistralPayload);
+            counter++;
+        } while (serviceResponse.getResponseCode() != HttpStatus.SC_OK && counter < 25);
+
+        assertEquals(serviceResponse.getResponseCode(), HttpStatus.SC_OK,
+                "Secured AI API invocation with opaque key failed");
+        assertEquals(serviceResponse.getData(), model1Response,
+                "Secured AI API response mismatch with opaque key");
+    }
+
+    /**
      * Test endpoint addition to Mistral AI API - handles multiple endpoints (production and sandbox)
      */
     @Test(groups = {"wso2.am"}, description = "Test multiple endpoint addition to AI API",
-            dependsOnMethods = "testSecuredAiApiInvocation")
+            dependsOnMethods = "testSecuredAiApiInvocationWithOpaqueKey")
     public void testAddAiApiEndpoint() throws Exception {
         // Add production endpoint
         String endpointConfig = readFile(resourcePath + ENDPOINT_CONFIG_TEMPLATE_FILE);
@@ -1044,10 +1100,24 @@ public class AIAPITestCase extends APIMIntegrationBaseTest {
         assertNotNull(subscriptionDTO, "API subscription should not be null");
 
         // Generate API Key
-        APIKeyDTO apiKeyDTO = restAPIStore.generateAPIKeys(applicationId,
-                ApplicationKeyGenerateRequestDTO.KeyTypeEnum.PRODUCTION.toString(), -1, null, null);
-        assertNotNull(apiKeyDTO, "API Key should not be null");
-        return apiKeyDTO.getApikey();
+        ApplicationDTO applicationDTO = restAPIStore.getApplicationById(applicationId);
+        JWTGenerator.JwtTokenInfo tokenInfo = new JWTGenerator.JwtTokenInfo.Builder()
+                .endUsername(user.getUserName())
+                .sub(user.getUserName())
+                .issuer(keyManagerHTTPSURL + "oauth2/token")
+                .validityPeriod(3600)
+                .keyType("PRODUCTION")
+                .permittedIP(null)
+                .permittedReferer(null)
+                .applicationUUID(applicationDTO.getApplicationId())
+                .applicationName(applicationDTO.getName())
+                .applicationOwner(applicationDTO.getOwner())
+                .applicationTier(applicationDTO.getThrottlingPolicy())
+                .applicationId(restAPIInternal.getApplicationIdByUUID(MultitenantUtils.getTenantDomain(user.getUserName()), applicationDTO.getApplicationId()))
+                .build();
+        String apiKey = new JWTGenerator().generateToken(tokenInfo);
+        assertNotNull(apiKey, "API Key should not be null");
+        return apiKey;
     }
 
     /**

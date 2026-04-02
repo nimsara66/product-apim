@@ -17,6 +17,10 @@
 -->
 <!-- The contents of this file will be loaded for each web application -->
 <Context useHttpOnly="true" useRelativeRedirects="false">
+    
+    {% if web_app.cookie_processor is defined %}
+    <CookieProcessor sameSiteCookies="{{web_app.cookie_processor.same_site_cookies}}"/>
+    {% endif %}
 
     <!-- Default set of monitored resources -->
 
@@ -24,7 +28,7 @@
             loaderClass="org.wso2.carbon.webapp.mgt.loader.CarbonWebappClassLoader"/>
 
     <!-- Uncomment this to disable session persistence across Tomcat restarts -->
-    <Manager className="org.wso2.carbon.webapp.mgt.CarbonTomcatSessionManager">
+    <Manager className="{{ tenant_context.session_manager | default('org.wso2.carbon.webapp.mgt.CarbonTomcatSessionManager') }}">
         <SessionIdGenerator sessionIdLength="128"/>
     </Manager>
 
