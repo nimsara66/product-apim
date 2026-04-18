@@ -1,0 +1,182 @@
+[[1;34mINFO[m] Scanning for projects...
+[[1;33mWARNING[m] 
+[[1;33mWARNING[m] Some problems were encountered while building the effective model for org.wso2.am:wso2am:pom:4.7.0-SNAPSHOT
+[[1;33mWARNING[m] 'build.plugins.plugin.(groupId:artifactId)' must be unique but found duplicate declaration of plugin com.google.code.maven-replacer-plugin:replacer @ line 720, column 21
+[[1;33mWARNING[m] Reporting configuration should be done in <reporting> section, not in maven-site-plugin <configuration> as reportPlugins parameter. @ line 624, column 32
+[[1;33mWARNING[m] 
+[[1;33mWARNING[m] Some problems were encountered while building the effective model for org.wso2.am:am-parent:pom:4.7.0-SNAPSHOT
+[[1;33mWARNING[m] 'parent.relativePath' of POM org.wso2.am:am-parent:4.7.0-SNAPSHOT (/Users/anushaj/wso2/Sources/Products/product-apim/all-in-one-apim/pom.xml) points at org.wso2.am.root:am-parent-root instead of org.wso2:wso2, please verify your project structure @ line 31, column 13
+[[1;33mWARNING[m] 
+[[1;33mWARNING[m] It is highly recommended to fix these problems because they threaten the stability of your build.
+[[1;33mWARNING[m] 
+[[1;33mWARNING[m] For this reason, future Maven versions might no longer support building such malformed projects.
+[[1;33mWARNING[m] 
+[[1;34mINFO[m] Tycho Version:  4.0.6 (9942454590ad8a6e1c9aa907852cf017dc2ccb98)
+[[1;34mINFO[m] Tycho Mode:     project
+[[1;34mINFO[m] Tycho Builder:  maven
+[[1;34mINFO[m] Build Threads:  1
+[[1;34mINFO[m] Tycho Version:  4.0.6 (9942454590ad8a6e1c9aa907852cf017dc2ccb98)
+[[1;34mINFO[m] Tycho Mode:     project
+[[1;34mINFO[m] Tycho Builder:  maven
+[[1;34mINFO[m] Build Threads:  1
+[[1;34mINFO[m] [1m------------------------------------------------------------------------[m
+[[1;34mINFO[m] [1mReactor Build Order:[m
+[[1;34mINFO[m] 
+[[1;34mINFO[m] WSO2 API Manager - Aggregator Module                               [pom]
+[[1;34mINFO[m] WSO2 API Manager - Styles Parent                                   [pom]
+[[1;34mINFO[m] WSO2 API Manager - Styles                                       [bundle]
+[[1;34mINFO[m] WSO2 API Manager - UI Styles                                    [bundle]
+[[1;34mINFO[m] WSO2 API Manager - Multi Tenant Dashboard                       [bundle]
+[[1;34mINFO[m] WSO2 API Manager - Features Parent                                 [pom]
+[[1;34mINFO[m] WSO2 API Manager - Features Aggregator Module                      [pom]
+[[1;34mINFO[m] WSO2 API Manager - Styles Features                                 [pom]
+[[1;34mINFO[m] WSO2 API Manager - Multi Tenant Dashboard Feature                  [jar]
+[[1;34mINFO[m] WSO2 API Manager - Secutity Aggregated Feature                     [jar]
+[[1;34mINFO[m] WSO2 API Manager - Mediation Policies                              [pom]
+[[1;34mINFO[m] WSO2 Identity -  Authentication REST API Endpoint Feature          [pom]
+[[1;34mINFO[m] WSO2 API Manager - P2 Profile Generation Parent                    [pom]
+[[1;34mINFO[m] WSO2 API Manager - P2 Profile Generation                           [pom]
+[[1;34mINFO[m] WSO2 API Manager - OAuth2 Grant Types                              [pom]
+[[1;34mINFO[m] WSO2 API Manager - Identity Local Authenticators                   [pom]
+[[1;34mINFO[m] WSO2 API Manager - Distribution Parent                             [pom]
+[[1;34mINFO[m] WSO2 API Manager - Distribution                                    [pom]
+[[1;34mINFO[m] WSO2 API Manager - Integration Tests                               [pom]
+[[1;34mINFO[m] WSO2 API Manager - Integration Test Common Module                  [pom]
+[[1;34mINFO[m] WSO2 API Manager - Integration Admin Clients Module                [jar]
+[[1;34mINFO[m] WSO2 API Manager - Integration Clients Module                      [pom]
+[[1;34mINFO[m] Publisher API client                                               [jar]
+[[1;34mINFO[m] Admin API client                                                   [jar]
+[[1;34mINFO[m] Gateway API client                                                 [jar]
+[[1;34mINFO[m] Service Catalog API client                                         [jar]
+[[1;34mINFO[m] Store API client                                                   [jar]
+[[1;34mINFO[m] Governance API client                                              [jar]
+[[1;34mINFO[m] Internal API client                                                [jar]
+[[1;34mINFO[m] WSO2 API Manager - Integration Common Test Module                  [jar]
+[[1;34mINFO[m] WSO2 API Manager - Test Artifacts Tests                            [pom]
+[[1;34mINFO[m] WSO2 API Manager - RestFul Backend Module for Integration Tests    [jar]
+[[1;34mINFO[m] WSO2 API Manager - ArtifactDeploymentMonitor WebApp                [war]
+[[1;34mINFO[m] WSO2 API Manager - Framework Extensions                            [jar]
+[[1;34mINFO[m] WSO2 API Manager - Integration Extensions Module                   [jar]
+[[1;34mINFO[m] WSO2 API Manager - Integration UI Pages Module                     [jar]
+[[1;34mINFO[m] WSO2 API Manager - Extensions                                      [pom]
+[[1;34mINFO[m] WSO2 API Manager - Third Party Key Manager                      [bundle]
+[[1;34mINFO[m] WSO2 API Manager - Integration New Test Module                     [pom]
+[[1;34mINFO[m] WSO2 API Manager - Based on product benchmark Test Module          [jar]
+[[1;34mINFO[m] WSO2 API Manager - Based on product backend Test Module            [jar]
+[[1;34mINFO[m] WSO2 API Manager - Based on product restart Test Module            [jar]
+[[1;34mINFO[m] WSO2 API Manager - Integration Tests 2                             [pom]
+[[1;34mINFO[m] org.wso2.am.integration.common                                     [pom]
+[[1;34mINFO[m] integration-test-utils                                             [jar]
+[[1;34mINFO[m] testcontainers                                                     [jar]
+[[1;34mINFO[m] tests-integration                                                  [pom]
+[[1;34mINFO[m] cucumber-tests                                                     [jar]
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m-----------------------< [0;36morg.wso2.am:am-parent[0;1m >------------------------[m
+[[1;34mINFO[m] [1mBuilding WSO2 API Manager - Aggregator Module 4.7.0-SNAPSHOT      [1/48][m
+[[1;34mINFO[m] [1m--------------------------------[ pom ]---------------------------------[m
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mmaven-remote-resources-plugin:1.6.0:process[m [1m(default)[m @ [36mam-parent[0;1m ---[m
+[[1;34mINFO[m] Preparing remote bundle org.apache:apache-jar-resource-bundle:1.4
+[[1;34mINFO[m] Copying 3 resources from 1 bundle.
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--------------------< [0;36morg.wso2.am:am-styles-parent[0;1m >--------------------[m
+[[1;34mINFO[m] [1mBuilding WSO2 API Manager - Styles Parent 4.7.0-SNAPSHOT          [2/48][m
+[[1;34mINFO[m] [1m--------------------------------[ pom ]---------------------------------[m
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mmaven-remote-resources-plugin:1.6.0:process[m [1m(default)[m @ [36mam-styles-parent[0;1m ---[m
+[[1;34mINFO[m] Preparing remote bundle org.apache:apache-jar-resource-bundle:1.4
+[[1;34mINFO[m] Copying 3 resources from 1 bundle.
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m-------------------< [0;36morg.wso2.am:org.wso2.am.styles[0;1m >-------------------[m
+[[1;34mINFO[m] [1mBuilding WSO2 API Manager - Styles 4.7.0-SNAPSHOT                 [3/48][m
+[[1;34mINFO[m] [1m-------------------------------[ bundle ]-------------------------------[m
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mmaven-remote-resources-plugin:1.6.0:process[m [1m(default)[m @ [36morg.wso2.am.styles[0;1m ---[m
+[[1;34mINFO[m] Preparing remote bundle org.apache:apache-jar-resource-bundle:1.4
+[[1;34mINFO[m] Copying 3 resources from 1 bundle.
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mmaven-resources-plugin:3.1.0:resources[m [1m(default-resources)[m @ [36morg.wso2.am.styles[0;1m ---[m
+[[1;34mINFO[m] Using 'UTF-8' encoding to copy filtered resources.
+[[1;34mINFO[m] Copying 1 resource
+[[1;34mINFO[m] Copying 11 resources
+[[1;34mINFO[m] Copying 3 resources
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mmaven-compiler-plugin:3.8.1:compile[m [1m(default-compile)[m @ [36morg.wso2.am.styles[0;1m ---[m
+[[1;34mINFO[m] Nothing to compile - all classes are up to date
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mmaven-resources-plugin:3.1.0:testResources[m [1m(default-testResources)[m @ [36morg.wso2.am.styles[0;1m ---[m
+[[1;34mINFO[m] Using 'UTF-8' encoding to copy filtered resources.
+[[1;34mINFO[m] skip non existing resourceDirectory /Users/anushaj/wso2/Sources/Products/product-apim/all-in-one-apim/modules/styles/product/src/test/resources
+[[1;34mINFO[m] Copying 3 resources
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mmaven-compiler-plugin:3.8.1:testCompile[m [1m(default-testCompile)[m @ [36morg.wso2.am.styles[0;1m ---[m
+[[1;34mINFO[m] No sources to compile
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mmaven-surefire-plugin:2.22.2:test[m [1m(default-test)[m @ [36morg.wso2.am.styles[0;1m ---[m
+[[1;34mINFO[m] [1m------------------------------------------------------------------------[m
+[[1;34mINFO[m] [1mReactor Summary for WSO2 API Manager - Aggregator Module 4.7.0-SNAPSHOT:[m
+[[1;34mINFO[m] 
+[[1;34mINFO[m] WSO2 API Manager - Aggregator Module ............... [1;32mSUCCESS[m [  0.129 s]
+[[1;34mINFO[m] WSO2 API Manager - Styles Parent ................... [1;32mSUCCESS[m [  0.011 s]
+[[1;34mINFO[m] WSO2 API Manager - Styles .......................... [1;31mFAILURE[m [  0.204 s]
+[[1;34mINFO[m] WSO2 API Manager - UI Styles ....................... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Multi Tenant Dashboard .......... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Features Parent ................. [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Features Aggregator Module ...... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Styles Features ................. [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Multi Tenant Dashboard Feature .. [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Secutity Aggregated Feature ..... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Mediation Policies .............. [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 Identity -  Authentication REST API Endpoint Feature [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - P2 Profile Generation Parent .... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - P2 Profile Generation ........... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - OAuth2 Grant Types .............. [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Identity Local Authenticators ... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Distribution Parent ............. [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Distribution .................... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Integration Tests ............... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Integration Test Common Module .. [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Integration Admin Clients Module  [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Integration Clients Module ...... [1;33mSKIPPED[m
+[[1;34mINFO[m] Publisher API client ............................... [1;33mSKIPPED[m
+[[1;34mINFO[m] Admin API client ................................... [1;33mSKIPPED[m
+[[1;34mINFO[m] Gateway API client ................................. [1;33mSKIPPED[m
+[[1;34mINFO[m] Service Catalog API client ......................... [1;33mSKIPPED[m
+[[1;34mINFO[m] Store API client ................................... [1;33mSKIPPED[m
+[[1;34mINFO[m] Governance API client .............................. [1;33mSKIPPED[m
+[[1;34mINFO[m] Internal API client ................................ [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Integration Common Test Module .. [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Test Artifacts Tests ............ [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - RestFul Backend Module for Integration Tests [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - ArtifactDeploymentMonitor WebApp  [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Framework Extensions ............ [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Integration Extensions Module ... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Integration UI Pages Module ..... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Extensions ...................... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Third Party Key Manager ......... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Integration New Test Module ..... [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Based on product benchmark Test Module [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Based on product backend Test Module [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Based on product restart Test Module [1;33mSKIPPED[m
+[[1;34mINFO[m] WSO2 API Manager - Integration Tests 2 ............. [1;33mSKIPPED[m
+[[1;34mINFO[m] org.wso2.am.integration.common ..................... [1;33mSKIPPED[m
+[[1;34mINFO[m] integration-test-utils ............................. [1;33mSKIPPED[m
+[[1;34mINFO[m] testcontainers ..................................... [1;33mSKIPPED[m
+[[1;34mINFO[m] tests-integration .................................. [1;33mSKIPPED[m
+[[1;34mINFO[m] cucumber-tests ..................................... [1;33mSKIPPED[m
+[[1;34mINFO[m] [1m------------------------------------------------------------------------[m
+[[1;34mINFO[m] [1;31mBUILD FAILURE[m
+[[1;34mINFO[m] [1m------------------------------------------------------------------------[m
+[[1;34mINFO[m] Total time:  1.729 s
+[[1;34mINFO[m] Finished at: 2026-04-05T08:50:01+05:30
+[[1;34mINFO[m] [1m------------------------------------------------------------------------[m
+[[1;31mERROR[m] Failed to execute goal [32morg.apache.maven.plugins:maven-surefire-plugin:2.22.2:test[m [1m(default-test)[m on project [36morg.wso2.am.styles[m: [1;31msuiteXmlFiles is configured, but there is no TestNG dependency[m -> [1m[Help 1][m
+[[1;31mERROR[m] 
+[[1;31mERROR[m] To see the full stack trace of the errors, re-run Maven with the [1m-e[m switch.
+[[1;31mERROR[m] Re-run Maven using the [1m-X[m switch to enable full debug logging.
+[[1;31mERROR[m] 
+[[1;31mERROR[m] For more information about the errors and possible solutions, please read the following articles:
+[[1;31mERROR[m] [1m[Help 1][m http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException
+[[1;31mERROR[m] 
+[[1;31mERROR[m] After correcting the problems, you can resume the build with the command
+[[1;31mERROR[m]   [1mmvn <args> -rf :org.wso2.am.styles[m

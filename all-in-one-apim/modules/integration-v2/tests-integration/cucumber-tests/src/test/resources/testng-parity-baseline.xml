@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suite name="Cucumber Parity Baseline Suite" parallel="false" preserve-order="true">
+    <listeners>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.ParallelToggleAlterSuiteListener"/>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.TestNameMdcListener"/>
+    </listeners>
+
+    <test name="ParityBaselineTests" preserve-order="true">
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.common.SystemInitializationRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.common.TenantUserInitializationRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.JWTTokenFormatRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.SubscriptionThrottlingPolicyRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.DevPortalSearchVisibilityRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.GraphQLApiBaselineRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.WebSocketApiBaselineRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.GovernancePolicyBaselineRunner"/>
+        </classes>
+    </test>
+
+    <test name="ParityBaselineShutdown" preserve-order="true">
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.common.SystemShutdown"/>
+        </classes>
+    </test>
+</suite>

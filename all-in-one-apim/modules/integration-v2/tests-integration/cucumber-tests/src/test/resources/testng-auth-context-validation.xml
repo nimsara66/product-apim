@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suite name="Cucumber Auth Context Validation" preserve-order="true">
+    <listeners>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.ParallelToggleAlterSuiteListener"/>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.TestNameMdcListener"/>
+    </listeners>
+
+    <test name="AuthContextValidation" preserve-order="true">
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.common.SystemInitializationRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.common.TenantUserInitializationRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.CreateApplicationRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.APIRuntimeConfigurationsRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.APIKeyInvocationRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.OpenIDTokenRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.RefreshTokenRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.RevokeTokenRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.SandboxTokenRunner"/>
+        </classes>
+    </test>
+
+</suite>

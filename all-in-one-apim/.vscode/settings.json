@@ -1,0 +1,5 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "mvn -pl modules/integration-v2/tests-integration/cucumber-tests": true
+    }
+}
