@@ -72,6 +72,8 @@ public class Constants {
     public static final String DEFAULT_APIM_ADMIN = "api/am/admin/v4/";
     public static final String GATEWAY = "api/am/gateway/v2/";
     public static final String DEFAULT_APIM_TOKEN_EP = "oauth2/token";
+    public static final String DEFAULT_APIM_USERINFO_EP = "oauth2/userinfo";
+    public static final String DEFAULT_APIM_REVOKE_EP = "oauth2/revoke";
     public static final String DEFAULT_DCR_EP = "client-registration/v0.17/register";
 
     public static final String CURRENT_TENANT ="currentTenant";
@@ -109,5 +111,37 @@ public class Constants {
         public static final String TEXT_PLAIN = "text/plain";
         public static final String TEXT_XML = "text/xml";
         public static final String APPLICATION_CA_CERT = "application/x-x509-ca-cert";
+    }
+
+    // Context keys holding lists of resource ids created during a scenario, used for teardown.
+    public static final String CREATED_API_IDS = "createdApiIds";
+    public static final String CREATED_APPLICATION_IDS = "createdApplicationIds";
+
+    /**
+     * Lane-level test groups used to map scenarios to execution lanes.
+     * Values must match the lane names wired in the TestNG suites and Maven profiles
+     * (see src/test/resources/testng*.xml). The migration lane reuses the existing
+     * "migrationTest" group name excluded by the default Maven profile.
+     */
+    public static class TEST_GROUPS {
+
+        public static final String SMOKE = "smoke";
+        public static final String CORE = "core";
+        public static final String EXTENDED = "extended";
+        public static final String MIGRATION = "migrationTest";
+        public static final String RESTART = "restart";
+    }
+
+    /**
+     * Domain-level test groups used to tag scenarios by functional domain,
+     * aligned with the feature directory groups under src/test/resources/features.
+     */
+    public static class TEST_DOMAINS {
+
+        public static final String COMMON = "common";
+        public static final String PUBLISHER = "publisher";
+        public static final String MIGRATION = "migration";
+        public static final String HEADER = "header";
+        public static final String RESTART = "restart";
     }
 }

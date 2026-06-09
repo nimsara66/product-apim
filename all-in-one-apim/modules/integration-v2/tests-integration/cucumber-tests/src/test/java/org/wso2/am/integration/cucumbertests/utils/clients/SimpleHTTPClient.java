@@ -29,6 +29,10 @@ import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.config.Registry;
+import org.apache.http.config.RegistryBuilder;
+import org.apache.http.conn.socket.ConnectionSocketFactory;
+import org.apache.http.conn.socket.PlainConnectionSocketFactory;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.conn.ssl.TrustAllStrategy;
 import org.apache.http.entity.EntityTemplate;
@@ -73,7 +77,16 @@ public class SimpleHTTPClient {
 
             SSLConnectionSocketFactory csf = new SSLConnectionSocketFactory(sslContext);
 
-            PoolingHttpClientConnectionManager connManager = new PoolingHttpClientConnectionManager();
+            // Register the trust-all socket factory on the connection manager. When a connection
+            // manager instance is supplied to the builder, HttpClientBuilder#setSSLSocketFactory is
+            // ignored, so the factory must be wired in here for the trust-all context to take effect.
+            Registry<ConnectionSocketFactory> socketFactoryRegistry = RegistryBuilder.<ConnectionSocketFactory>create()
+                    .register("http", PlainConnectionSocketFactory.getSocketFactory())
+                    .register("https", csf)
+                    .build();
+
+            PoolingHttpClientConnectionManager connManager =
+                    new PoolingHttpClientConnectionManager(socketFactoryRegistry);
             connManager.setMaxTotal(1000);        // total max connections
             connManager.setDefaultMaxPerRoute(100);   // max connections per route
 

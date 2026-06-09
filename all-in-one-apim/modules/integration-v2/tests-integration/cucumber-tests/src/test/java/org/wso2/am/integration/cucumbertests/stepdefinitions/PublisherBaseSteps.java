@@ -48,14 +48,14 @@ import java.io.FileNotFoundException;
 
 public class PublisherBaseSteps {
 
-    private final String baseUrl;
     private static final Logger logger = LoggerFactory.getLogger(PublisherBaseSteps.class);
 
-    public PublisherBaseSteps() {
-        baseUrl = TestContext.get("baseUrl").toString();
-    }
-
     BaseSteps baseSteps = new BaseSteps();
+
+    private String getBaseUrl() {
+
+        return baseSteps.getBaseUrl();
+    }
 
 
     /**
@@ -76,13 +76,16 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse apiCreateResponse = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getAPICreateEndpointURL(baseUrl, resourceType), headers, jsonPayload,
+                .doPost(Utils.getAPICreateEndpointURL(getBaseUrl(), resourceType), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         TestContext.set("httpResponse", apiCreateResponse);
 
         Assert.assertEquals(apiCreateResponse.getResponseCode(), 201, apiCreateResponse.getData());
-        TestContext.set(resourceID, Utils.extractValueFromPayload(apiCreateResponse.getData(), "id"));
+        Object createdId = Utils.extractValueFromPayload(apiCreateResponse.getData(), "id");
+        TestContext.set(resourceID, createdId);
+        // Register for scenario teardown so a shared-server suite does not accumulate APIs across scenarios.
+        TestContext.addToList(Constants.CREATED_API_IDS, createdId);
     }
 
     /**
@@ -103,7 +106,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse apiUpdateResponse = SimpleHTTPClient.getInstance().doPut(
-                Utils.getResourceEndpointURL(baseUrl,resourceType ,actualResourceId), headers, jsonPayload,
+                Utils.getResourceEndpointURL(getBaseUrl(),resourceType ,actualResourceId), headers, jsonPayload,
                 Constants.CONTENT_TYPES.APPLICATION_JSON);
         TestContext.set("httpResponse", apiUpdateResponse);
     }
@@ -171,7 +174,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse createRevisionResponse = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getRevisionURL(baseUrl,resourceType, actualResourceId), headers, jsonPayload,
+                .doPost(Utils.getRevisionURL(getBaseUrl(),resourceType, actualResourceId), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         Assert.assertEquals(createRevisionResponse.getResponseCode(), 201, createRevisionResponse.getData());
@@ -197,7 +200,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse getRevisionResponse = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getRevisionURL(baseUrl,resourceType, actualResourceId), headers);
+                .doGet(Utils.getRevisionURL(getBaseUrl(),resourceType, actualResourceId), headers);
 
         TestContext.set("httpResponse", getRevisionResponse);
         Assert.assertEquals(getRevisionResponse.getResponseCode(), 200, getRevisionResponse.getData());
@@ -233,7 +236,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse getRevisionResponse = SimpleHTTPClient.getInstance()
-                .doDelete(Utils.getRevisionByID(baseUrl, resourceType, actualResourceId, actualRevisionId), headers);
+                .doDelete(Utils.getRevisionByID(getBaseUrl(), resourceType, actualResourceId, actualRevisionId), headers);
 
         TestContext.set("httpResponse", getRevisionResponse);
     }
@@ -259,7 +262,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse deployRevisionResponse = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getRevisionDeploymentURL(baseUrl, resourceType, actualResourceId, actualRevisionId), headers, jsonPayload,
+                .doPost(Utils.getRevisionDeploymentURL(getBaseUrl(), resourceType, actualResourceId, actualRevisionId), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         TestContext.set("httpResponse", deployRevisionResponse);
@@ -288,7 +291,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse unDeployRevisionResponse = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getRevisionUnDeploymentURL(baseUrl, resourceType, actualrRsourceId, actualRevisionId), headers, jsonPayload,
+                .doPost(Utils.getRevisionUnDeploymentURL(getBaseUrl(), resourceType, actualrRsourceId, actualRevisionId), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         TestContext.set("httpResponse", unDeployRevisionResponse);
@@ -312,7 +315,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse restoreRevisionResponse = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getRevisionRestoreURL(baseUrl, resourceType, actualResourceId, actualRevisionId), headers, null, null);
+                .doPost(Utils.getRevisionRestoreURL(getBaseUrl(), resourceType, actualResourceId, actualRevisionId), headers, null, null);
 
         TestContext.set("httpResponse", restoreRevisionResponse);
     }
@@ -331,7 +334,7 @@ public class PublisherBaseSteps {
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION,
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
-        HttpResponse apiDeleteResponse = SimpleHTTPClient.getInstance().doDelete(Utils.getResourceEndpointURL(baseUrl, resourceType,
+        HttpResponse apiDeleteResponse = SimpleHTTPClient.getInstance().doDelete(Utils.getResourceEndpointURL(getBaseUrl(), resourceType,
                 actualResourceId), headers);
         TestContext.set("httpResponse", apiDeleteResponse);
     }
@@ -351,7 +354,7 @@ public class PublisherBaseSteps {
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION,
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
         HttpResponse publishResponse = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getChangeLifecycleURL(baseUrl, resourceType, actualResourceId, "Publish", null), headers, null, null);
+                .doPost(Utils.getChangeLifecycleURL(getBaseUrl(), resourceType, actualResourceId, "Publish", null), headers, null, null);
         TestContext.set("httpResponse", publishResponse);
     }
 
@@ -370,7 +373,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getResourceEndpointURL(baseUrl, resourceType, actualResourceId), headers);
+                .doGet(Utils.getResourceEndpointURL(getBaseUrl(), resourceType, actualResourceId), headers);
         TestContext.set("httpResponse", response);
     }
 
@@ -386,7 +389,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getAPISearchEndpointURL(baseUrl, null, null, null), headers);
+                .doGet(Utils.getAPISearchEndpointURL(getBaseUrl(), null, null, null), headers);
 
         TestContext.set("httpResponse", response);
     }
@@ -425,7 +428,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse lifecycleStatusResponse = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getAPILifecycleStateURL(baseUrl, actualApiId), headers);
+                .doGet(Utils.getAPILifecycleStateURL(getBaseUrl(), actualApiId), headers);
         TestContext.set("httpResponse", lifecycleStatusResponse);
 
         Assert.assertEquals(new JSONObject(lifecycleStatusResponse.getData()).getString("state"), status);
@@ -459,7 +462,7 @@ public class PublisherBaseSteps {
 
         for (int attempt = 1; attempt <= Constants.MAX_RETRIES; attempt++) {
             response = SimpleHTTPClient.getInstance()
-                    .doGet(Utils.getAPISearchEndpointURL(baseUrl, searchQuery, null, null), headers);
+                    .doGet(Utils.getAPISearchEndpointURL(getBaseUrl(), searchQuery, null, null), headers);
 
             if (response.getResponseCode() == 200) {
                 apiUUID = Utils.extractAPIUUID(response.getData());
@@ -558,7 +561,7 @@ public class PublisherBaseSteps {
         String actualResourceId = Utils.resolveFromContext(resourceId).toString();
         String revisionId = Utils.resolveFromContext("revisionId").toString();
 
-        String url = Utils.getRevisionDeployments(baseUrl, resourceType, actualResourceId);
+        String url = Utils.getRevisionDeployments(getBaseUrl(), resourceType, actualResourceId);
 
         Map<String, String> headers = new HashMap<>();
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION,
@@ -630,7 +633,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse apiNewVersionResponse = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getNewAPIVersionURL(baseUrl, resourceType, newVersion, defaultVersion, actualResourceID), headers, null, null);
+                .doPost(Utils.getNewAPIVersionURL(getBaseUrl(), resourceType, newVersion, defaultVersion, actualResourceID), headers, null, null);
 
         TestContext.set("httpResponse", apiNewVersionResponse);
         TestContext.set(newVersionID, Utils.extractValueFromPayload(apiNewVersionResponse.getData(), "id"));
@@ -675,7 +678,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse documentCreationResponse = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getAPIDocuments(baseUrl, actualApiId), headers, jsonPayload,
+                .doPost(Utils.getAPIDocuments(getBaseUrl(), actualApiId), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         TestContext.set("httpResponse", documentCreationResponse);
@@ -697,7 +700,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getAPIDocuments(baseUrl, actualApiId), headers);
+                .doGet(Utils.getAPIDocuments(getBaseUrl(), actualApiId), headers);
         TestContext.set("httpResponse", response);
     }
 
@@ -750,7 +753,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getAPIDocument(baseUrl, actualApiId, documentId), headers);
+                .doGet(Utils.getAPIDocument(getBaseUrl(), actualApiId, documentId), headers);
         TestContext.set("httpResponse", response);
 
     }
@@ -772,7 +775,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doDelete(Utils.getAPIDocument(baseUrl, actualApiId, documentId), headers);
+                .doDelete(Utils.getAPIDocument(getBaseUrl(), actualApiId, documentId), headers);
         TestContext.set("httpResponse", response);
     }
 
@@ -825,7 +828,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse documentUpdateResponse = SimpleHTTPClient.getInstance()
-                .doPut(Utils.getAPIDocument(baseUrl, actualApiId, documentId), headers, jsonPayload,
+                .doPut(Utils.getAPIDocument(getBaseUrl(), actualApiId, documentId), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         TestContext.set("httpResponse", documentUpdateResponse);
@@ -926,7 +929,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse documentUpdateResponse = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getSubscriptionBlockingURL(baseUrl, subscriptionId), headers, null, null);
+                .doPost(Utils.getSubscriptionBlockingURL(getBaseUrl(), subscriptionId), headers, null, null);
 
         TestContext.set("httpResponse", documentUpdateResponse);
     }
@@ -946,7 +949,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse documentUpdateResponse = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getSubscriptionUnBlockingURL(baseUrl, subscriptionId), headers, null, null);
+                .doPost(Utils.getSubscriptionUnBlockingURL(getBaseUrl(), subscriptionId), headers, null, null);
 
         TestContext.set("httpResponse", documentUpdateResponse);
     }
@@ -966,7 +969,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getSubscriptions(baseUrl, actualResourceID), headers);
+                .doGet(Utils.getSubscriptions(getBaseUrl(), actualResourceID), headers);
         TestContext.set("httpResponse", response);
     }
 
@@ -998,7 +1001,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse scopeCreationResponse = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getAPIScopes(baseUrl), headers, jsonPayload,
+                .doPost(Utils.getAPIScopes(getBaseUrl()), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         TestContext.set("httpResponse", scopeCreationResponse);
@@ -1020,7 +1023,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doDelete(Utils.getAPIScopesById(baseUrl, scopeId), headers);
+                .doDelete(Utils.getAPIScopesById(getBaseUrl(), scopeId), headers);
         TestContext.set("httpResponse", response);
     }
 
@@ -1043,7 +1046,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doPut(Utils.getAPIScopesById(baseUrl, scopeId), headers, jsonPayload,
+                .doPut(Utils.getAPIScopesById(getBaseUrl(), scopeId), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
         TestContext.set("httpResponse", response);
     }
@@ -1062,7 +1065,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getAPIScopes(baseUrl), headers);
+                .doGet(Utils.getAPIScopes(getBaseUrl()), headers);
 
         TestContext.set("httpResponse", response);
 
@@ -1122,10 +1125,14 @@ public class PublisherBaseSteps {
         files.put("file", schemaFile);
 
         HttpResponse apiCreateResponse = SimpleHTTPClient.getInstance()
-                .doPostMultipartWithFiles(Utils.getGraphQLSchema(baseUrl), headers, files, formFields);
+                .doPostMultipartWithFiles(Utils.getGraphQLSchema(getBaseUrl()), headers, files, formFields);
 
+        TestContext.set("httpResponse", apiCreateResponse);
         Assert.assertEquals(apiCreateResponse.getResponseCode(), 201, apiCreateResponse.getData());
-        TestContext.set(apiID, Utils.extractValueFromPayload(apiCreateResponse.getData(), "id"));
+        Object createdId = Utils.extractValueFromPayload(apiCreateResponse.getData(), "id");
+        TestContext.set(apiID, createdId);
+        // Register for scenario teardown so a shared-server suite does not accumulate APIs across scenarios.
+        TestContext.addToList(Constants.CREATED_API_IDS, createdId);
     }
 
     /**
@@ -1142,7 +1149,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getProductSearchEndpointURL(baseUrl, productName), headers);
+                .doGet(Utils.getProductSearchEndpointURL(getBaseUrl(), productName), headers);
 
         TestContext.set("httpResponse", response);
         TestContext.set(productId, Utils.extractAPIUUID(response.getData()));
@@ -1196,7 +1203,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse apiUpdateResponse = SimpleHTTPClient.getInstance().doPut(
-                Utils.getResourceEndpointURL(baseUrl,"api-products" ,actualResourceId), headers, jsonPayload,
+                Utils.getResourceEndpointURL(getBaseUrl(),"api-products" ,actualResourceId), headers, jsonPayload,
                 Constants.CONTENT_TYPES.APPLICATION_JSON);
         TestContext.set("httpResponse", apiUpdateResponse);
     }
@@ -1311,10 +1318,10 @@ public class PublisherBaseSteps {
         String endpointUrl;
         if (apiId == null || apiId.isEmpty()) {
             // Common policy
-            endpointUrl = Utils.getCommonPolicy(baseUrl);
+            endpointUrl = Utils.getCommonPolicy(getBaseUrl());
         } else {
             // API-specific policy
-            endpointUrl = Utils.getAPISpecificPolicy(baseUrl, apiId);
+            endpointUrl = Utils.getAPISpecificPolicy(getBaseUrl(), apiId);
         }
 
         HttpResponse policyCreateResponse = SimpleHTTPClient.getInstance()
@@ -1349,7 +1356,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getCommonPolicy(baseUrl), headers);
+                .doGet(Utils.getCommonPolicy(getBaseUrl()), headers);
 
         TestContext.set("httpResponse", response);
     }
@@ -1371,7 +1378,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doDelete(Utils.getAPISpecificPolicyById(baseUrl, actualApiId, policyID), headers);
+                .doDelete(Utils.getAPISpecificPolicyById(getBaseUrl(), actualApiId, policyID), headers);
         TestContext.set("httpResponse", response);
     }
 
@@ -1394,7 +1401,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getGlobalPolicy(baseUrl), headers, jsonPayload,
+                .doPost(Utils.getGlobalPolicy(getBaseUrl()), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         TestContext.set("httpResponse", response);
@@ -1421,7 +1428,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getGlobalPolicyDeploy(baseUrl,policyId), headers, jsonPayload,
+                .doPost(Utils.getGlobalPolicyDeploy(getBaseUrl(),policyId), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         TestContext.set("httpResponse", response);
@@ -1445,7 +1452,7 @@ public class PublisherBaseSteps {
                 "Bearer " + TestContext.get("publisherAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getSwaggerURL(baseUrl, resourceType, actualResourceID), headers);
+                .doGet(Utils.getSwaggerURL(getBaseUrl(), resourceType, actualResourceID), headers);
 
         TestContext.set("httpResponse", response);
     }
@@ -1496,7 +1503,7 @@ public class PublisherBaseSteps {
         files.put("additionalProperties", additionalPropertiesFile);
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doPostMultipartWithFiles(Utils.getAPIDefinitionURL(baseUrl), headers, files, null);
+                .doPostMultipartWithFiles(Utils.getAPIDefinitionURL(getBaseUrl()), headers, files, null);
 
         TestContext.set("httpResponse", response);
         Assert.assertEquals(response.getResponseCode(), 201, response.getData());
@@ -1537,7 +1544,7 @@ public class PublisherBaseSteps {
         files.put("apiDefinition", swaggerFile);
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doPutMultipartWithFiles(Utils.getSwaggerURL(baseUrl, resourceType, actualResourceID), headers, files, null);
+                .doPutMultipartWithFiles(Utils.getSwaggerURL(getBaseUrl(), resourceType, actualResourceID), headers, files, null);
 
         TestContext.set("httpResponse", response);
     }

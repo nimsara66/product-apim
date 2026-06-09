@@ -1,3 +1,4 @@
+@cleanup
 Feature: JWT Token Format
   This feature validates JWT token format generation for OAuth password-grant flow.
 

@@ -28,6 +28,7 @@ import org.wso2.am.integration.cucumbertests.utils.clients.SimpleHTTPClient;
 import org.wso2.am.integration.test.utils.Constants;
 import org.wso2.carbon.automation.engine.context.beans.Tenant;
 import org.wso2.carbon.automation.engine.context.beans.User;
+import org.wso2.carbon.automation.test.utils.http.client.HttpResponse;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -38,15 +39,23 @@ import java.util.Map;
 
 public class APIInvocationSteps {
 
-    private final String baseGatewayUrl;
-    private final Tenant tenant;
-    private User currentuser;
+    private String getBaseGatewayUrl() {
 
-    public APIInvocationSteps() {
+        Object baseGatewayUrl = TestContext.get("baseGatewayUrl");
+        if (baseGatewayUrl == null) {
+            throw new IllegalStateException("baseGatewayUrl is not available in the test context yet");
+        }
+        return baseGatewayUrl.toString();
+    }
 
-        baseGatewayUrl= TestContext.get("baseGatewayUrl").toString();
-        tenant = Utils.getTenantFromContext("currentTenant");
-        currentuser = tenant.getContextUser();
+    private Tenant getCurrentTenant() {
+
+        return Utils.getTenantFromContext("currentTenant");
+    }
+
+    private User getCurrentUser() {
+
+        return getCurrentTenant().getContextUser();
     }
 
     /**
@@ -72,8 +81,8 @@ public class APIInvocationSteps {
             throw new IllegalStateException("DB type is not set in environment variables");
         }
 
-        String tenantDomain = tenant.getDomain();
-        String username = currentuser.getUserNameWithoutDomain();
+        String tenantDomain = getCurrentTenant().getDomain();
+        String username = getCurrentUser().getUserNameWithoutDomain();
 
         if (tenantDomain == null || username == null) {
             throw new IllegalStateException(
@@ -108,7 +117,7 @@ public class APIInvocationSteps {
 
         String actualAccessToken = Utils.resolveFromContext(accessToken).toString();
         String actualPayload = (payload == null || payload.isEmpty()) ? "" : Utils.resolveFromContext(payload).toString();
-        String endpointUrl = Utils.getAPIInvocationURL(baseGatewayUrl, path, tenant.getDomain());
+        String endpointUrl = Utils.getAPIInvocationURL(getBaseGatewayUrl(), path, getCurrentTenant().getDomain());
 
         Map<String, String> headers = new HashMap<>();
         headers.put("Authorization", "Bearer " + actualAccessToken);
@@ -145,7 +154,7 @@ public class APIInvocationSteps {
     public void invokeApiUsingKey(String path, String httpMethod, String apikey) throws Exception {
 
         String actualKey = Utils.resolveFromContext(apikey).toString();
-        String endpointUrl = Utils.getAPIInvocationURL(baseGatewayUrl, path, tenant.getDomain());
+        String endpointUrl = Utils.getAPIInvocationURL(getBaseGatewayUrl(), path, getCurrentTenant().getDomain());
 
         Map<String, String> headers = new HashMap<>();
         headers.put("accept", "application/json");
@@ -169,6 +178,78 @@ public class APIInvocationSteps {
     }
 
     /**
+     * Invokes an API using an API Key, retrying until the response reaches the expected status code or
+     * the timeout elapses. Useful right after deployment/publish while the gateway eventually becomes
+     * consistent. The last response is left in context for the following assertion step.
+     *
+     * @param path           The API resource path to invoke
+     * @param httpMethod     The HTTP method to use
+     * @param apikey         Context key containing the API key
+     * @param expectedStatus The response status code to wait for
+     * @param timeoutSeconds Maximum time to keep retrying, in seconds
+     */
+    @When("I invoke the API resource at path {string} with method {string} using api key {string} until response status code becomes {int} within {int} seconds")
+    public void invokeApiUsingKeyUntilStatus(String path, String httpMethod, String apikey, int expectedStatus,
+                                             int timeoutSeconds) throws Exception {
+
+        long endTime = System.currentTimeMillis() + timeoutSeconds * 1000L;
+        do {
+            invokeApiUsingKey(path, httpMethod, apikey);
+            HttpResponse response = (HttpResponse) TestContext.get("httpResponse");
+            if (response != null && response.getResponseCode() == expectedStatus) {
+                return;
+            }
+            Thread.sleep(2000);
+        } while (System.currentTimeMillis() < endTime);
+    }
+
+    /**
+     * Invokes an API using an access token, retrying until the response reaches the expected status
+     * code or the timeout elapses. Useful for eventual-consistency waits (e.g. a token becoming valid
+     * after subscription, or invalid after revocation). The last response is left in context.
+     *
+     * @param path           The API resource path to invoke
+     * @param httpMethod     The HTTP method to use
+     * @param accessToken    Context key containing the access token
+     * @param payload        Context key containing the request payload
+     * @param expectedStatus The response status code to wait for
+     * @param timeoutSeconds Maximum time to keep retrying, in seconds
+     */
+    @When("I invoke the API resource at path {string} with method {string} using access token {string} and payload {string} until response status code becomes {int} within {int} seconds")
+    public void invokeApiUsingAccessTokenUntilStatus(String path, String httpMethod, String accessToken, String payload,
+                                                     int expectedStatus, int timeoutSeconds) throws Exception {
+
+        long endTime = System.currentTimeMillis() + timeoutSeconds * 1000L;
+        do {
+            invokeApiUsingAccessToken(path, httpMethod, accessToken, payload);
+            HttpResponse response = (HttpResponse) TestContext.get("httpResponse");
+            if (response != null && response.getResponseCode() == expectedStatus) {
+                return;
+            }
+            Thread.sleep(2000);
+        } while (System.currentTimeMillis() < endTime);
+    }
+
+    /**
+     * Invokes the OpenID Connect userinfo endpoint with the given access token and stores the response.
+     *
+     * @param accessToken Context key containing the access token
+     */
+    @When("I invoke the OpenID userinfo endpoint using access token {string}")
+    public void invokeUserInfoEndpoint(String accessToken) throws Exception {
+
+        String actualAccessToken = Utils.resolveFromContext(accessToken).toString();
+        String baseUrl = TestContext.get("baseUrl").toString();
+
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Authorization", "Bearer " + actualAccessToken);
+        headers.put("accept", "application/json");
+
+        TestContext.set("httpResponse",
+                SimpleHTTPClient.getInstance().doGet(Utils.getUserInfoEndpointURL(baseUrl), headers));
+    }
+
+    /**
      * Invokes a SOAP API endpoint using an OAuth2 access token for authentication.
      * This step sets the appropriate Content-Type header for SOAP (text/xml) and includes the SOAPAction header
      * if provided. The payload should be a SOAP envelope in XML format.
@@ -183,7 +264,7 @@ public class APIInvocationSteps {
 
         String actualAccessToken = Utils.resolveFromContext(accessToken).toString();
         String actualPayload = Utils.resolveFromContext(payload).toString();
-        String endpointUrl = Utils.getAPIInvocationURL(baseGatewayUrl, path, tenant.getDomain());
+        String endpointUrl = Utils.getAPIInvocationURL(getBaseGatewayUrl(), path, getCurrentTenant().getDomain());
 
         Map<String, String> headers = new HashMap<>();
         headers.put("Authorization", "Bearer " + actualAccessToken);

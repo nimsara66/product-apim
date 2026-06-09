@@ -1,3 +1,4 @@
+@cleanup
 Feature: Invalid Token Invocation
   This feature validates that gateway invocation fails with a clear 401 response for invalid bearer tokens.
 

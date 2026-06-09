@@ -69,6 +69,14 @@
         <apim.docker.image.name>wso2am:${apim.server.version}-jdk21</apim.docker.image.name>
         <!--Node app servers docker image-->
         <node.docker.image.name>node-app-server:latest</node.docker.image.name>
+        <!-- Extra hosts passed to the APIM docker image build so the build can reach the host's
+             distribution HTTP server. host-gateway resolves to the host on both Linux and Docker
+             Desktop/Colima. CI overrides this with the same value. -->
+        <docker.extra.hosts>--add-host=host.docker.internal:host-gateway</docker.extra.hosts>
+        <!-- Docker/Testcontainers overrides. Left empty by default and auto-populated via the
+             Colima profile when the local Colima socket is present. -->
+        <docker.host>${env.DOCKER_HOST}</docker.host>
+        <testcontainers.docker.socket.override>${env.TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE}</testcontainers.docker.socket.override>
 
         <!-- Debug API Manager instance-->
         <apim.debug.enabled>False</apim.debug.enabled>
@@ -152,6 +160,8 @@
                                 <GATEWAY_ENVIRONMENT>Production and Sandbox</GATEWAY_ENVIRONMENT>
                                 <APIM_TEST_CONTAINERS_PARALLEL_ENABLED>False</APIM_TEST_CONTAINERS_PARALLEL_ENABLED>
                                 <PARALLEL_THREAD_COUNT>1</PARALLEL_THREAD_COUNT>
+                                <DOCKER_HOST>${docker.host}</DOCKER_HOST>
+                                <TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE>${testcontainers.docker.socket.override}</TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE>
 
                                 <SHARED_DATABASE_TYPE>${shared.database.type}</SHARED_DATABASE_TYPE>
                                 <SHARED_DATABASE_DRIVER>${shared.database.driver}</SHARED_DATABASE_DRIVER>
@@ -215,6 +225,8 @@
                                 <GATEWAY_ENVIRONMENT>Default</GATEWAY_ENVIRONMENT>
                                 <APIM_TEST_CONTAINERS_PARALLEL_ENABLED>True</APIM_TEST_CONTAINERS_PARALLEL_ENABLED>
                                 <PARALLEL_THREAD_COUNT>2</PARALLEL_THREAD_COUNT>
+                                <DOCKER_HOST>${docker.host}</DOCKER_HOST>
+                                <TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE>${testcontainers.docker.socket.override}</TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE>
 
                                 <SHARED_DATABASE_TYPE>h2</SHARED_DATABASE_TYPE>
                                 <SHARED_DATABASE_DRIVER>org.h2.Driver</SHARED_DATABASE_DRIVER>
@@ -248,6 +260,18 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+        <profile>
+            <id>colima-auto</id>
+            <activation>
+                <file>
+                    <exists>${user.home}/.colima/default/docker.sock</exists>
+                </file>
+            </activation>
+            <properties>
+                <docker.host>unix://${user.home}/.colima/default/docker.sock</docker.host>
+                <testcontainers.docker.socket.override>/var/run/docker.sock</testcontainers.docker.socket.override>
+            </properties>
         </profile>
     </profiles>
 </project>

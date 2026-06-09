@@ -1,3 +1,4 @@
+@cleanup
 Feature: WebSocket API Baseline
   This feature validates WebSocket API create and publish flow in integration-v2.
 

@@ -151,6 +151,10 @@ enable_lightweight_apikey_generation = true
 #[apim.publisher]
 #enable_portal_configuration_only_mode = false
 
+[apim.devportal]
+enable_application_sharing = true
+application_sharing_type = "default"
+
 [apim.cors]
 allow_origins = "*"
 allow_methods = ["GET","PUT","POST","DELETE","PATCH","OPTIONS"]

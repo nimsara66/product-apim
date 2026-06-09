@@ -30,11 +30,15 @@ import java.util.List;
  */
 public class ParallelToggleAlterSuiteListener implements IAlterSuiteListener {
 
+    private static final int DEFAULT_THREAD_COUNT = 1;
+
     @Override
     public void alter(List<XmlSuite> suites) {
 
-        boolean isParallel = Boolean.parseBoolean(System.getenv(Constants.APIM_TEST_CONTAINERS_PARALLEL_ENABLED));
-        int threadCount = Integer.parseInt(System.getenv(Constants.PARALLEL_THREAD_COUNT));
+        boolean isParallel = Boolean.parseBoolean(
+                System.getenv(Constants.APIM_TEST_CONTAINERS_PARALLEL_ENABLED)
+        );
+        int threadCount = getThreadCount();
 
         // Set parallel mode to TEST if parallel test execution is enabled
         XmlSuite.ParallelMode parallelMode = isParallel ?
@@ -44,5 +48,14 @@ public class ParallelToggleAlterSuiteListener implements IAlterSuiteListener {
             suite.setParallel(parallelMode);  // override <suite parallel="...">
             suite.setThreadCount(isParallel ? threadCount : 1);    // override thread-count
         }
+    }
+
+    private int getThreadCount() {
+
+        String threadCountValue = System.getenv(Constants.PARALLEL_THREAD_COUNT);
+        if (threadCountValue == null || threadCountValue.isBlank()) {
+            return DEFAULT_THREAD_COUNT;
+        }
+        return Integer.parseInt(threadCountValue);
     }
 }

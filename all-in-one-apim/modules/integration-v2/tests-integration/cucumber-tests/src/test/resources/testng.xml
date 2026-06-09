@@ -19,6 +19,12 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.APIDocumentsTestRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.APIOtherCommonConfigurationsRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.CreateApplicationRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.JWTTokenFormatRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.SubscriptionThrottlingPolicyRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.DevPortalSearchVisibilityRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.GraphQLApiBaselineRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.WebSocketApiBaselineRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.publisher.GovernancePolicyBaselineRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.migration.MigratedAPIVerificationRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.migration.MigratedAPIDocumentationRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.migration.MigratedAPIRevisionRunner"/>

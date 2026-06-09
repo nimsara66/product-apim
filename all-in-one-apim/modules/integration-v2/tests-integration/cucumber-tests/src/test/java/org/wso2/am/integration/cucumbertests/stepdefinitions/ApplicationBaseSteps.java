@@ -27,23 +27,24 @@ import org.wso2.am.integration.cucumbertests.utils.TestContext;
 import org.wso2.am.integration.cucumbertests.utils.Utils;
 import org.wso2.am.integration.cucumbertests.utils.clients.SimpleHTTPClient;
 import org.wso2.am.integration.test.utils.Constants;
+import org.wso2.carbon.automation.engine.context.beans.User;
 import org.wso2.carbon.automation.test.utils.http.client.HttpResponse;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.IntStream;
 
 public class ApplicationBaseSteps {
 
-    private final String baseUrl;
-
-    public ApplicationBaseSteps() {
-
-        baseUrl = TestContext.get("baseUrl").toString();
-    }
-
     BaseSteps baseSteps = new BaseSteps();
+
+    private String getBaseUrl() {
+
+        return baseSteps.getBaseUrl();
+    }
 
     /**
      * Creates a new application in the Developer Portal using a JSON payload.
@@ -60,12 +61,15 @@ public class ApplicationBaseSteps {
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
         HttpResponse applicationCreateResponse = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getApplicationCreateURL(baseUrl), headers, jsonPayload,
+                .doPost(Utils.getApplicationCreateURL(getBaseUrl()), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         TestContext.set("httpResponse", applicationCreateResponse);
         Assert.assertEquals(applicationCreateResponse.getResponseCode(), 201, applicationCreateResponse.getData());
-        TestContext.set("createdAppId", Utils.extractValueFromPayload(applicationCreateResponse.getData(), "applicationId"));
+        Object createdAppId = Utils.extractValueFromPayload(applicationCreateResponse.getData(), "applicationId");
+        TestContext.set("createdAppId", createdAppId);
+        // Register for scenario teardown so a shared-server suite does not accumulate applications across scenarios.
+        TestContext.addToList(Constants.CREATED_APPLICATION_IDS, createdAppId);
     }
 
     /**
@@ -82,7 +86,7 @@ public class ApplicationBaseSteps {
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
         HttpResponse applicationDeleteResponse = SimpleHTTPClient.getInstance()
-                .doDelete(Utils.getApplicationEndpointURL(baseUrl, actualAppId), headers);
+                .doDelete(Utils.getApplicationEndpointURL(getBaseUrl(), actualAppId), headers);
 
         TestContext.set("httpResponse", applicationDeleteResponse);
     }
@@ -101,7 +105,7 @@ public class ApplicationBaseSteps {
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
         HttpResponse applicationRetrieveResponse = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getApplicationEndpointURL(baseUrl, actualAppId), headers);
+                .doGet(Utils.getApplicationEndpointURL(getBaseUrl(), actualAppId), headers);
 
         TestContext.set("httpResponse", applicationRetrieveResponse);
     }
@@ -120,7 +124,7 @@ public class ApplicationBaseSteps {
                 "Bearer " + TestContext.get("devportalAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getApplicationSearchURL(baseUrl, applicationName), headers);
+                .doGet(Utils.getApplicationSearchURL(getBaseUrl(), applicationName), headers);
 
         TestContext.set("httpResponse", response);
 
@@ -153,7 +157,7 @@ public class ApplicationBaseSteps {
                 "Bearer " + TestContext.get("devportalAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance().doPut(
-                Utils.getApplicationEndpointURL(baseUrl, actualAppId), headers, jsonPayload,
+                Utils.getApplicationEndpointURL(getBaseUrl(), actualAppId), headers, jsonPayload,
                 Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         TestContext.set("httpResponse", response);
@@ -183,9 +187,10 @@ public class ApplicationBaseSteps {
         Map<String, String> headers = new HashMap<>();
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
-        HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getCreateSubscriptionURL(baseUrl),
+        HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getCreateSubscriptionURL(getBaseUrl()),
                 headers, jsonPayload, Constants.CONTENT_TYPES.APPLICATION_JSON);
 
+        TestContext.set("httpResponse", response);
         Assert.assertEquals(response.getResponseCode(), 201, response.getData());
         TestContext.set(subscriptionID,Utils.extractValueFromPayload(response.getData(), "subscriptionId"));
     }
@@ -206,7 +211,7 @@ public class ApplicationBaseSteps {
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getAllSubscriptionsURL(baseUrl, actualApiId, actualAppId, null, null,
+                .doGet(Utils.getAllSubscriptionsURL(getBaseUrl(), actualApiId, actualAppId, null, null,
                         null), headers);
 
         TestContext.set("httpResponse", response);
@@ -238,7 +243,7 @@ public class ApplicationBaseSteps {
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getApplicationAllKeys(baseUrl, actualAppId), headers);
+                .doGet(Utils.getApplicationAllKeys(getBaseUrl(), actualAppId), headers);
 
         TestContext.set("httpResponse", response);
 
@@ -281,7 +286,7 @@ public class ApplicationBaseSteps {
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doPut(Utils.getUpdateKey(baseUrl, actualAppId, keyMappingId), headers, jsonPayload,
+                .doPut(Utils.getUpdateKey(getBaseUrl(), actualAppId, keyMappingId), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
         TestContext.set("httpResponse", response);
     }
@@ -301,7 +306,7 @@ public class ApplicationBaseSteps {
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doDelete(Utils.getUpdateKey(baseUrl, actualAppId, keyMappingId), headers);
+                .doDelete(Utils.getUpdateKey(getBaseUrl(), actualAppId, keyMappingId), headers);
         TestContext.set("httpResponse", response);
     }
 
@@ -322,7 +327,7 @@ public class ApplicationBaseSteps {
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getGenerateApplicationKeysURL(baseUrl, actualAppId), headers, jsonPayload,
+                .doPost(Utils.getGenerateApplicationKeysURL(getBaseUrl(), actualAppId), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         TestContext.set("httpResponse", response);
@@ -354,11 +359,135 @@ public class ApplicationBaseSteps {
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getGenerateApplicationTokenURL(baseUrl, actualAppId, keyMappingId), headers, jsonPayload,
+                .doPost(Utils.getGenerateApplicationTokenURL(getBaseUrl(), actualAppId, keyMappingId), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
 
+        TestContext.set("httpResponse", response);
         String accessToken = Utils.extractValueFromPayload(response.getData(), "accessToken").toString();
         TestContext.set("generatedAccessToken", accessToken);
+    }
+
+    /**
+     * Requests an OAuth2 access token for the current user via the token endpoint using the
+     * password grant, authenticated with the application's generated client credentials
+     * (consumerKey/consumerSecret in context). The raw token response is stored as "httpResponse",
+     * the access token as "generatedAccessToken", and the refresh token (if any) as "refreshToken".
+     *
+     * @param scope OAuth scope to request (may be empty for no explicit scope)
+     */
+    @When("I request an OAuth access token for the current user using password grant with scope {string}")
+    public void iRequestOAuthAccessTokenWithScope(String scope) throws Exception {
+
+        User currentUser = Utils.getTenantFromContext(Constants.CURRENT_TENANT).getContextUser();
+
+        StringBuilder body = new StringBuilder("grant_type=password")
+                .append("&username=").append(urlEncode(currentUser.getUserName()))
+                .append("&password=").append(urlEncode(currentUser.getPassword()));
+        if (scope != null && !scope.isEmpty()) {
+            body.append("&scope=").append(urlEncode(scope));
+        }
+
+        HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getAPIMTokenEndpointURL(getBaseUrl()),
+                clientCredentialsHeader(), body.toString(), Constants.CONTENT_TYPES.APPLICATION_X_WWW_FORM_URLENCODED);
+
+        TestContext.set("httpResponse", response);
+        captureTokens(response);
+    }
+
+    /**
+     * Requests a new access token using the refresh-token grant, authenticated with the application's
+     * client credentials. Stores the new tokens and the raw response in context.
+     *
+     * @param refreshTokenKey Context key holding the refresh token to exchange
+     */
+    @When("I request a new OAuth access token using refresh token {string}")
+    public void iRequestTokenUsingRefreshToken(String refreshTokenKey) throws Exception {
+
+        String refreshToken = Utils.resolveFromContext(refreshTokenKey).toString();
+
+        String body = "grant_type=refresh_token&refresh_token=" + urlEncode(refreshToken);
+
+        HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getAPIMTokenEndpointURL(getBaseUrl()),
+                clientCredentialsHeader(), body, Constants.CONTENT_TYPES.APPLICATION_X_WWW_FORM_URLENCODED);
+
+        TestContext.set("httpResponse", response);
+        captureTokens(response);
+    }
+
+    private static String urlEncode(String value) {
+        return java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Revokes the given OAuth access token via the revocation endpoint, authenticated with the
+     * application's client credentials. Stores the response in context.
+     *
+     * @param tokenKey Context key holding the access token to revoke
+     */
+    @When("I revoke the OAuth access token {string}")
+    public void iRevokeOAuthAccessToken(String tokenKey) throws Exception {
+
+        String token = Utils.resolveFromContext(tokenKey).toString();
+
+        HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getRevokeEndpointURL(getBaseUrl()),
+                clientCredentialsHeader(), "token=" + token,
+                Constants.CONTENT_TYPES.APPLICATION_X_WWW_FORM_URLENCODED);
+
+        TestContext.set("httpResponse", response);
+    }
+
+    /**
+     * Builds a Basic auth header from the application's generated client credentials
+     * (consumerKey/consumerSecret) held in context.
+     */
+    private Map<String, String> clientCredentialsHeader() {
+
+        String consumerKey = Utils.resolveFromContext("consumerKey").toString();
+        String consumerSecret = Utils.resolveFromContext("consumerSecret").toString();
+        String credentials = Base64.getEncoder().encodeToString(
+                (consumerKey + ":" + consumerSecret).getBytes(StandardCharsets.UTF_8));
+
+        Map<String, String> headers = new HashMap<>();
+        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Basic " + credentials);
+        return headers;
+    }
+
+    /**
+     * Extracts access_token and refresh_token (when present) from a token-endpoint response into context.
+     * Tolerates responses without a refresh token (e.g. some scope/grant combinations).
+     */
+    private void captureTokens(HttpResponse response) {
+
+        JSONObject json;
+        try {
+            json = new JSONObject(response.getData());
+        } catch (Exception e) {
+            return;
+        }
+        if (json.has("access_token")) {
+            TestContext.set("generatedAccessToken", json.getString("access_token"));
+        }
+        if (json.has("refresh_token")) {
+            TestContext.set("refreshToken", json.getString("refresh_token"));
+        }
+    }
+
+    /**
+     * Asserts that the access token stored as "generatedAccessToken" is a self-contained JWT:
+     * three base64url-encoded segments whose header decodes to JSON containing an "alg" claim.
+     */
+    @Then("The generated access token should be in JWT format")
+    public void theGeneratedAccessTokenShouldBeInJWTFormat() {
+
+        String token = Utils.resolveFromContext("generatedAccessToken").toString();
+        String[] parts = token.split("\\.");
+        Assert.assertEquals(parts.length, 3,
+                "Access token is not in JWT format (expected 3 dot-separated segments): " + token);
+
+        String headerJson = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
+        JSONObject header = new JSONObject(headerJson);
+        Assert.assertTrue(header.has("alg"),
+                "JWT header does not contain an 'alg' claim: " + headerJson);
     }
 
     /**
@@ -377,7 +506,7 @@ public class ApplicationBaseSteps {
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doPost(Utils.getGenerateAPIKeyURL(baseUrl, actualAppId), headers, jsonPayload,
+                .doPost(Utils.getGenerateAPIKeyURL(getBaseUrl(), actualAppId), headers, jsonPayload,
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         TestContext.set("httpResponse", response);
@@ -397,7 +526,7 @@ public class ApplicationBaseSteps {
         Map<String, String> headers = new HashMap<>();
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
-        HttpResponse response = SimpleHTTPClient.getInstance().doDelete(Utils.getSubscriptionURL(baseUrl,
+        HttpResponse response = SimpleHTTPClient.getInstance().doDelete(Utils.getSubscriptionURL(getBaseUrl(),
                 actualSubscriptionId), headers);
 
         TestContext.set("httpResponse", response);
@@ -417,12 +546,25 @@ public class ApplicationBaseSteps {
 
         // Add application id and API id to the payload
         String jsonPayload = Utils.resolveFromContext("subscriptionPayload").toString();
-        jsonPayload = jsonPayload.replace("\"throttlingPolicy\":\"Unlimited\"", "\"throttlingPolicy\":\"" + subscriptionPlan +"\"");
+        // Set the throttling policy to the requested plan regardless of the current value or JSON spacing
+        // (the payload may be a pretty-printed template or a compact subscription response).
+        jsonPayload = jsonPayload.replaceAll("(\"throttlingPolicy\"\\s*:\\s*)\"[^\"]*\"",
+                "$1\"" + subscriptionPlan + "\"");
+
+        // Resolve application/api id placeholders when the payload is a hand-built template. When the
+        // payload is taken from an actual subscription response (e.g. migration flow) it carries real
+        // ids and no placeholders, so these replacements are a no-op.
+        if (jsonPayload.contains("{{applicationId}}") && TestContext.contains("createdAppId")) {
+            jsonPayload = jsonPayload.replace("{{applicationId}}", TestContext.get("createdAppId").toString());
+        }
+        if (jsonPayload.contains("{{apiId}}") && TestContext.contains("createdApiId")) {
+            jsonPayload = jsonPayload.replace("{{apiId}}", TestContext.get("createdApiId").toString());
+        }
 
         Map<String, String> headers = new HashMap<>();
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
-        HttpResponse response = SimpleHTTPClient.getInstance().doPut(Utils.getSubscriptionURL(baseUrl, actualSubscriptionId),
+        HttpResponse response = SimpleHTTPClient.getInstance().doPut(Utils.getSubscriptionURL(getBaseUrl(), actualSubscriptionId),
                 headers, jsonPayload, Constants.CONTENT_TYPES.APPLICATION_JSON);
 
         TestContext.set("httpResponse", response);
@@ -441,7 +583,7 @@ public class ApplicationBaseSteps {
         Map<String, String> headers = new HashMap<>();
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
-        HttpResponse response = SimpleHTTPClient.getInstance().doGet(Utils.getSubscriptionURL(baseUrl,
+        HttpResponse response = SimpleHTTPClient.getInstance().doGet(Utils.getSubscriptionURL(getBaseUrl(),
                 actualSubscriptionId), headers);
 
         TestContext.set("httpResponse", response);
@@ -483,6 +625,7 @@ public class ApplicationBaseSteps {
         // create an application
         baseSteps.putJsonPayloadFromFile("artifacts/payloads/create_apim_test_app.json", "<createAppPayload>");
         iCreateAnApplicationWithJsonPayload("<createAppPayload>");
+        baseSteps.theResponseStatusCodeShouldBe(201);
 
         // generate credentials for application
         baseSteps.putJsonPayloadInContext("<generateApplicationKeysPayload>", "{\"keyType\": \"PRODUCTION\"," +
@@ -494,6 +637,7 @@ public class ApplicationBaseSteps {
         baseSteps.putJsonPayloadInContext("<apiSubscriptionPayload>", "{\"applicationId\": \"{{applicationId}}\"," +
                 "\"apiId\": \"{{apiId}}\",\"throttlingPolicy\": \"Bronze\"}");
         iSubscribeToApi(apiId, "<createdAppId>", "<apiSubscriptionPayload>", subscriptionID);
+        baseSteps.theResponseStatusCodeShouldBe(201);
 
         // generate access token
         baseSteps.putJsonPayloadInContext("<createApplicationAccessTokenPayload>", "{\"consumerSecret\": \"{{appConsumerSecret}}\"," +
@@ -558,14 +702,27 @@ public class ApplicationBaseSteps {
      * @param query The search query string
      */
     @When("I search DevPortal APIs with query {string}")
-    public void iSearchDevPortalAPIsWithQuery(String query) throws IOException {
+    public void iSearchDevPortalAPIsWithQuery(String query) throws IOException, InterruptedException {
 
         Map<String, String> headers = new HashMap<>();
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION,
                 "Bearer " + TestContext.get("devportalAccessToken").toString());
 
-        HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getApiSearchURL(baseUrl, query), headers);
+        String url = Utils.getApiSearchURL(getBaseUrl(), query);
+        long endTime = System.currentTimeMillis() + Constants.DEPLOYMENT_WAIT_TIME;
+
+        // DevPortal search is backed by an asynchronous (Solr) index, so a freshly published API may
+        // not be searchable immediately. Retry while the result set is empty until it appears or times out.
+        HttpResponse response;
+        while (true) {
+            response = SimpleHTTPClient.getInstance().doGet(url, headers);
+            boolean empty = response == null || response.getResponseCode() != 200
+                    || new JSONObject(response.getData()).optInt("count", 0) == 0;
+            if (!empty || System.currentTimeMillis() >= endTime) {
+                break;
+            }
+            Thread.sleep(2000);
+        }
 
         TestContext.set("httpResponse", response);
     }
@@ -583,7 +740,7 @@ public class ApplicationBaseSteps {
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + TestContext.get("devportalAccessToken").toString());
 
         HttpResponse response = SimpleHTTPClient.getInstance()
-                .doGet(Utils.getApiDocumentsURL(baseUrl, actualApiId), headers);
+                .doGet(Utils.getApiDocumentsURL(getBaseUrl(), actualApiId), headers);
 
         TestContext.set("httpResponse", response);
     }

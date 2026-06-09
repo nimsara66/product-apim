@@ -1,3 +1,4 @@
+@cleanup
 Feature: Subscription Throttling Policy
   This feature validates subscription plan updates for a subscribed API.
 
@@ -12,15 +13,11 @@ Feature: Subscription Throttling Policy
     When I have set up application with keys, subscribed to API "createdApiId", and obtained access token for "subscriptionId"
     Then The response status code should be 200
 
-    When I put the following JSON payload in context as "subscriptionPayload"
-    """
-    {
-      "applicationId": "{{applicationId}}",
-      "apiId": "{{apiId}}",
-      "throttlingPolicy": "Unlimited"
-    }
-    """
-    And I update the subscription "subscriptionId" with subscription plan "Gold"
+    When I get the subscription with id "subscriptionId"
+    Then The response status code should be 200
+    And I put the response payload in context as "subscriptionPayload"
+
+    When I update the subscription "subscriptionId" with subscription plan "Gold"
     Then The response status code should be 200
 
     When I get the subscription with id "subscriptionId"

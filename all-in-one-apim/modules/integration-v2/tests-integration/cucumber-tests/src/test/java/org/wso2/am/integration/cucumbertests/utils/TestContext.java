@@ -17,32 +17,109 @@
 
 package org.wso2.am.integration.cucumbertests.utils;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class TestContext {
 
-    // ThreadLocal to maintain a separate contextMap per thread
-    private static final ThreadLocal<Map<String, Object>> threadLocalContext =
-            ThreadLocal.withInitial(HashMap::new);
+    private static final String DEFAULT_SHARED_SCOPE = "global-shared";
+    private static final String DEFAULT_LOCAL_SCOPE = "global-local";
+
+    private static final Map<String, Map<String, Object>> sharedContexts = new ConcurrentHashMap<>();
+    private static final Map<String, Map<String, Object>> localContexts = new ConcurrentHashMap<>();
+    private static final InheritableThreadLocal<ContextScope> currentScope = new InheritableThreadLocal<>();
+
+    private static final class ContextScope {
+        private final String sharedScopeId;
+        private final String localScopeId;
+
+        private ContextScope(String sharedScopeId, String localScopeId) {
+            this.sharedScopeId = sharedScopeId;
+            this.localScopeId = localScopeId;
+        }
+    }
+
+    public static void setScope(String sharedScopeId, String localScopeId) {
+        currentScope.set(new ContextScope(defaultIfBlank(sharedScopeId, DEFAULT_SHARED_SCOPE),
+                defaultIfBlank(localScopeId, DEFAULT_LOCAL_SCOPE)));
+    }
+
+    public static void clearScope() {
+        currentScope.remove();
+    }
 
     public static void set(String key, Object value) {
-        threadLocalContext.get().put(key, value);
+        getCurrentLocalContext().put(key, value);
+    }
+
+    public static void setShared(String key, Object value) {
+        getCurrentSharedContext().put(key, value);
+    }
+
+    /**
+     * Appends a value to a list stored under the given key, creating the list if absent.
+     * Used to register created resources (e.g. API/application ids) for scenario teardown.
+     */
+    @SuppressWarnings("unchecked")
+    public static void addToList(String key, Object value) {
+        ((List<Object>) getCurrentLocalContext().computeIfAbsent(key, k -> new ArrayList<>())).add(value);
+    }
+
+    /**
+     * Returns the list stored under the given key, or an empty list if absent.
+     */
+    @SuppressWarnings("unchecked")
+    public static List<Object> getList(String key) {
+        Object value = get(key);
+        return value instanceof List ? (List<Object>) value : new ArrayList<>();
     }
 
     public static Object get(String key) {
-        return threadLocalContext.get().get(key);
+        Map<String, Object> localContext = getCurrentLocalContext();
+        if (localContext.containsKey(key)) {
+            return localContext.get(key);
+        }
+        return getCurrentSharedContext().get(key);
     }
 
     public static boolean contains(String key) {
-        return threadLocalContext.get().containsKey(key);
+        return getCurrentLocalContext().containsKey(key) || getCurrentSharedContext().containsKey(key);
     }
 
     public  static void remove(String key) {
-        threadLocalContext.get().remove(key);
+        getCurrentLocalContext().remove(key);
+    }
+
+    public static void removeShared(String key) {
+        getCurrentSharedContext().remove(key);
     }
 
     public static void clear() {
-        threadLocalContext.get().clear();
+        ContextScope scope = getScope();
+        localContexts.remove(scope.localScopeId);
+        sharedContexts.remove(scope.sharedScopeId);
+    }
+
+    private static ContextScope getScope() {
+        ContextScope scope = currentScope.get();
+        if (scope == null) {
+            scope = new ContextScope(DEFAULT_SHARED_SCOPE, DEFAULT_LOCAL_SCOPE);
+            currentScope.set(scope);
+        }
+        return scope;
+    }
+
+    private static Map<String, Object> getCurrentLocalContext() {
+        return localContexts.computeIfAbsent(getScope().localScopeId, key -> new ConcurrentHashMap<>());
+    }
+
+    private static Map<String, Object> getCurrentSharedContext() {
+        return sharedContexts.computeIfAbsent(getScope().sharedScopeId, key -> new ConcurrentHashMap<>());
+    }
+
+    private static String defaultIfBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 }

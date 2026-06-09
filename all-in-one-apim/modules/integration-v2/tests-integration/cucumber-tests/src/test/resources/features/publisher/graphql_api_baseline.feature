@@ -1,3 +1,4 @@
+@cleanup
 Feature: GraphQL API Baseline
   This feature validates GraphQL API creation and publish flow in integration-v2.
 

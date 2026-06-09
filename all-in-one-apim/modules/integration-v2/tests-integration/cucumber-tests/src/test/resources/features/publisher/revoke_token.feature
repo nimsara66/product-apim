@@ -1,3 +1,4 @@
+@cleanup
 Feature: Revoke Token
   This feature validates that a revoked OAuth access token is eventually rejected by the gateway.
 
@@ -40,7 +41,7 @@ Feature: Revoke Token
 
     When I request an OAuth access token for the current user using password grant with scope "PRODUCTION"
     Then The response status code should be 200
-    And I invoke the API resource at path "/apiTestContext/1.0.0/customers/123/" with method "GET" using access token "generatedAccessToken" and payload ""
+    And I invoke the API resource at path "/apiTestContext/1.0.0/customers/123/" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 30 seconds
     Then The response status code should be 200
 
     When I revoke the OAuth access token "generatedAccessToken"

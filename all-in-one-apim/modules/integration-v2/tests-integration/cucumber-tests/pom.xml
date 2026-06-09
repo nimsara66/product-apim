@@ -32,6 +32,9 @@
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <runGroupTest>false</runGroupTest>
+        <!-- TestNG suite to run. Override to run a specific suite, e.g.
+             -Dsurefire.suite.xml=testng-parity-baseline.xml -->
+        <surefire.suite.xml>testng.xml</surefire.suite.xml>
     </properties>
     <dependencies>
         <dependency>
@@ -124,12 +127,41 @@
                     <excludedGroups>${surefire.excludedGroups}</excludedGroups>
                     <groups>${surefire.groups}</groups>
                     <suiteXmlFiles>
-                        <suiteXmlFile>src/test/resources/testng.xml</suiteXmlFile>
+                        <suiteXmlFile>src/test/resources/${surefire.suite.xml}</suiteXmlFile>
                     </suiteXmlFiles>
                     <systemPropertyVariables>
+                        <javax.net.ssl.trustStore>${truststore.path}</javax.net.ssl.trustStore>
+                        <javax.net.ssl.trustStorePassword>${truststore.password}</javax.net.ssl.trustStorePassword>
+                        <javax.net.ssl.keyStore>${keystore.path}</javax.net.ssl.keyStore>
+                        <javax.net.ssl.keyStorePassword>${keystore.password}</javax.net.ssl.keyStorePassword>
                         <testcontainers.reuse.enable>true</testcontainers.reuse.enable>
+                        <module.dir>${project.basedir}</module.dir>
+                        <apim.server.name>${apim.server.name}</apim.server.name>
+                        <apim.docker.image.name>${apim.docker.image.name}</apim.docker.image.name>
+                        <node.docker.image.name>${node.docker.image.name}</node.docker.image.name>
+                        <apim.debug.enabled>${apim.debug.enabled}</apim.debug.enabled>
+                        <apim.debug.port>${apim.debug.port}</apim.debug.port>
                         <org.apache.http.wire.level>OFF</org.apache.http.wire.level>
                     </systemPropertyVariables>
+                    <environmentVariables>
+                        <GATEWAY_ENVIRONMENT>${surefire.gateway.environment}</GATEWAY_ENVIRONMENT>
+                        <APIM_TEST_CONTAINERS_PARALLEL_ENABLED>${surefire.parallel.enabled}</APIM_TEST_CONTAINERS_PARALLEL_ENABLED>
+                        <PARALLEL_THREAD_COUNT>${surefire.parallel.thread.count}</PARALLEL_THREAD_COUNT>
+                        <DOCKER_HOST>${docker.host}</DOCKER_HOST>
+                        <TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE>${testcontainers.docker.socket.override}</TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE>
+                        <SHARED_DATABASE_TYPE>${surefire.shared.database.type}</SHARED_DATABASE_TYPE>
+                        <SHARED_DATABASE_DRIVER>${surefire.shared.database.driver}</SHARED_DATABASE_DRIVER>
+                        <SHARED_DATABASE_URL>${surefire.shared.database.url}</SHARED_DATABASE_URL>
+                        <SHARED_DATABASE_USERNAME>${surefire.shared.database.username}</SHARED_DATABASE_USERNAME>
+                        <SHARED_DATABASE_PASSWORD>${surefire.shared.database.password}</SHARED_DATABASE_PASSWORD>
+                        <SHARED_DATABASE_VALIDATION_QUERY>${surefire.shared.database.validationQuery}</SHARED_DATABASE_VALIDATION_QUERY>
+                        <API_MANAGER_DATABASE_TYPE>${surefire.apim.database.type}</API_MANAGER_DATABASE_TYPE>
+                        <API_MANAGER_DATABASE_DRIVER>${surefire.apim.database.driver}</API_MANAGER_DATABASE_DRIVER>
+                        <API_MANAGER_DATABASE_URL>${surefire.apim.database.url}</API_MANAGER_DATABASE_URL>
+                        <API_MANAGER_DATABASE_USERNAME>${surefire.apim.database.username}</API_MANAGER_DATABASE_USERNAME>
+                        <API_MANAGER_DATABASE_PASSWORD>${surefire.apim.database.password}</API_MANAGER_DATABASE_PASSWORD>
+                        <API_MANAGER_DATABASE_VALIDATION_QUERY>${surefire.apim.database.validationQuery}</API_MANAGER_DATABASE_VALIDATION_QUERY>
+                    </environmentVariables>
                 </configuration>
             </plugin>
         </plugins>
@@ -144,11 +176,45 @@
             <properties>
                 <surefire.groups/>
                 <surefire.excludedGroups>migrationTest</surefire.excludedGroups>
+                <surefire.gateway.environment>Default</surefire.gateway.environment>
+                <surefire.parallel.enabled>True</surefire.parallel.enabled>
+                <surefire.parallel.thread.count>2</surefire.parallel.thread.count>
+                <surefire.shared.database.type>h2</surefire.shared.database.type>
+                <surefire.shared.database.driver>org.h2.Driver</surefire.shared.database.driver>
+                <surefire.shared.database.url>jdbc:h2:./repository/database/WSO2SHARED_DB;DB_CLOSE_ON_EXIT=FALSE</surefire.shared.database.url>
+                <surefire.shared.database.username>wso2carbon</surefire.shared.database.username>
+                <surefire.shared.database.password>wso2carbon</surefire.shared.database.password>
+                <surefire.shared.database.validationQuery>SELECT 1</surefire.shared.database.validationQuery>
+                <surefire.apim.database.type>h2</surefire.apim.database.type>
+                <surefire.apim.database.driver>org.h2.Driver</surefire.apim.database.driver>
+                <surefire.apim.database.url>jdbc:h2:./repository/database/WSO2AM_APIMGT_DB;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=60000</surefire.apim.database.url>
+                <surefire.apim.database.username>wso2carbon</surefire.apim.database.username>
+                <surefire.apim.database.password>wso2carbon</surefire.apim.database.password>
+                <surefire.apim.database.validationQuery>SELECT 1</surefire.apim.database.validationQuery>
             </properties>
         </profile>
         <!-- Profile to include all tests including migrationTest -->
         <profile>
             <id>migration</id>
+            <properties>
+                <surefire.groups/>
+                <surefire.excludedGroups/>
+                <surefire.gateway.environment>Production and Sandbox</surefire.gateway.environment>
+                <surefire.parallel.enabled>False</surefire.parallel.enabled>
+                <surefire.parallel.thread.count>1</surefire.parallel.thread.count>
+                <surefire.shared.database.type>${shared.database.type}</surefire.shared.database.type>
+                <surefire.shared.database.driver>${shared.database.driver}</surefire.shared.database.driver>
+                <surefire.shared.database.url>${shared.database.url}</surefire.shared.database.url>
+                <surefire.shared.database.username>${shared.database.username}</surefire.shared.database.username>
+                <surefire.shared.database.password>${shared.database.password}</surefire.shared.database.password>
+                <surefire.shared.database.validationQuery>${shared.database.validationQuery}</surefire.shared.database.validationQuery>
+                <surefire.apim.database.type>${apim.database.type}</surefire.apim.database.type>
+                <surefire.apim.database.driver>${apim.database.driver}</surefire.apim.database.driver>
+                <surefire.apim.database.url>${apim.database.url}</surefire.apim.database.url>
+                <surefire.apim.database.username>${apim.database.username}</surefire.apim.database.username>
+                <surefire.apim.database.password>${apim.database.password}</surefire.apim.database.password>
+                <surefire.apim.database.validationQuery>${apim.database.validationQuery}</surefire.apim.database.validationQuery>
+            </properties>
         </profile>
     </profiles>
 </project>

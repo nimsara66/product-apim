@@ -1,3 +1,4 @@
+@cleanup
 Feature: Refresh Token
   This feature validates password-grant token generation and refresh-token based re-issuance for subscribed APIs.
 
@@ -9,7 +10,7 @@ Feature: Refresh Token
     When I publish the "apis" resource with id "createdApiId"
     Then The lifecycle status of API "createdApiId" should be "Published"
 
-    When I put JSON payload from file "artifacts/payloads/create_apim_test_app.json" in context as "createAppPayload"
+    When I put JSON payload from file "artifacts/payloads/create_apim_test_app_oauth.json" in context as "createAppPayload"
     And I create an application with payload "createAppPayload"
     Then The response status code should be 201
 
@@ -40,12 +41,12 @@ Feature: Refresh Token
 
     When I request an OAuth access token for the current user using password grant with scope "PRODUCTION"
     Then The response status code should be 200
-    And I invoke the API resource at path "/apiTestContext/1.0.0/customers/123/" with method "GET" using access token "generatedAccessToken" and payload ""
+    And I invoke the API resource at path "/apiTestContext/1.0.0/customers/123/" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 30 seconds
     Then The response status code should be 200
 
     When I request a new OAuth access token using refresh token "refreshToken"
     Then The response status code should be 200
-    And I invoke the API resource at path "/apiTestContext/1.0.0/customers/123/" with method "GET" using access token "generatedAccessToken" and payload ""
+    And I invoke the API resource at path "/apiTestContext/1.0.0/customers/123/" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 30 seconds
     Then The response status code should be 200
 
     When I delete the subscription with id "subscriptionId"

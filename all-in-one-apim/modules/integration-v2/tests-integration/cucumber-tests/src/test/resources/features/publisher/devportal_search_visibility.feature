@@ -1,3 +1,4 @@
+@cleanup
 Feature: DevPortal Search And Visibility
   This feature validates non-migration API search visibility in DevPortal.
 

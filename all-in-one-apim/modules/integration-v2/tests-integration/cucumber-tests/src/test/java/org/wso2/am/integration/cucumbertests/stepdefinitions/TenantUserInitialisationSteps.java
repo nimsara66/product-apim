@@ -39,10 +39,14 @@ import java.util.Map;
 public class TenantUserInitialisationSteps {
 
     private static final Logger logger = LoggerFactory.getLogger(TenantUserInitialisationSteps.class);
-    private final String baseUrl;
 
-    public TenantUserInitialisationSteps() {
-        baseUrl = TestContext.get("baseUrl").toString();
+    private String getBaseUrl() {
+
+        Object baseUrlObj = TestContext.get("baseUrl");
+        if (baseUrlObj == null) {
+            throw new IllegalStateException("baseUrl is not available in the test context yet");
+        }
+        return baseUrlObj.toString();
     }
 
     /**
@@ -61,7 +65,7 @@ public class TenantUserInitialisationSteps {
                         "</soapenv:Body>" +
                         "</soapenv:Envelope>";
 
-        String url = Utils.getTenantMgtAdminServiceURL(baseUrl);
+        String url = Utils.getTenantMgtAdminServiceURL(getBaseUrl());
         HttpResponse response = SimpleHTTPClient.getInstance().sendSoapRequest(
                 url, payload, "urn:retrieveTenants",
                 Constants.SUPER_TENANT_ADMIN_USERNAME, Constants.SUPER_TENANT_ADMIN_PASSWORD);
@@ -84,7 +88,7 @@ public class TenantUserInitialisationSteps {
         admin.setUserName(Constants.SUPER_TENANT_ADMIN_USERNAME);
         admin.setPassword(Constants.SUPER_TENANT_ADMIN_PASSWORD);
         superTenant.setTenantAdmin(admin);
-        TestContext.set(Constants.SUPER_TENANT_DOMAIN, superTenant);
+        TestContext.setShared(Constants.SUPER_TENANT_DOMAIN, superTenant);
     }
 
     /**
@@ -102,7 +106,7 @@ public class TenantUserInitialisationSteps {
         admin.setUserName(Constants.ADPSAMPLE_TENANT_ADMIN_USERNAME);
         admin.setPassword(Constants.ADPSAMPLE_TENANT_ADMIN_PASSWORD);
         adpTenant.setTenantAdmin(admin);
-        TestContext.set(Constants.ADPSAMPLE_TENANT_DOMAIN, adpTenant);
+        TestContext.setShared(Constants.ADPSAMPLE_TENANT_DOMAIN, adpTenant);
     }
 
     /**
@@ -144,7 +148,7 @@ public class TenantUserInitialisationSteps {
                     "</ser:addTenant>" +
                     "</soapenv:Body></soapenv:Envelope>";
 
-            String url = Utils.getTenantMgtAdminServiceURL(baseUrl);
+            String url = Utils.getTenantMgtAdminServiceURL(getBaseUrl());
             HttpResponse response = SimpleHTTPClient.getInstance().sendSoapRequest(
                     url, payload, "urn:addTenant",
                     Constants.SUPER_TENANT_ADMIN_USERNAME, Constants.SUPER_TENANT_ADMIN_PASSWORD);
@@ -157,7 +161,7 @@ public class TenantUserInitialisationSteps {
         Tenant tenant = new Tenant();
         tenant.setDomain(tenantDomain);
         tenant.setTenantAdmin(admin);
-        TestContext.set(tenantDomain, tenant);
+        TestContext.setShared(tenantDomain, tenant);
     }
 
     /**
@@ -184,7 +188,7 @@ public class TenantUserInitialisationSteps {
         Tenant tenant = Utils.getTenantFromContext(tenantDomain);
         User tenantAdmin = tenant.getTenantAdmin();
 
-        String url = Utils.getRemoteUserStoreManagerServiceURL(baseUrl);
+        String url = Utils.getRemoteUserStoreManagerServiceURL(getBaseUrl());
         HttpResponse response = SimpleHTTPClient.getInstance().sendSoapRequest(url, payload, "urn:listUsers",
                 tenantAdmin.getUserName(), tenantAdmin.getPassword());
 
@@ -231,7 +235,7 @@ public class TenantUserInitialisationSteps {
                     "</xsd:addUser>" +
                     "</soapenv:Body></soapenv:Envelope>";
 
-            String url = Utils.getMultipleCredentialsUserAdminServiceURL(baseUrl);
+            String url = Utils.getMultipleCredentialsUserAdminServiceURL(getBaseUrl());
             HttpResponse response = SimpleHTTPClient.getInstance().sendSoapRequest(url, payload, "urn:addUser",
                     tenant.getTenantAdmin().getUserName(), tenant.getTenantAdmin().getPassword());
             Assert.assertEquals(response.getResponseCode(), 200, response.getData());
@@ -241,7 +245,7 @@ public class TenantUserInitialisationSteps {
         tenantUser.setPassword(password);
         tenantUser.setKey(userKey);
         tenant.addTenantUsers(tenantUser);
-        TestContext.set(tenantDomain, tenant);
+        TestContext.setShared(tenantDomain, tenant);
     }
 
 }

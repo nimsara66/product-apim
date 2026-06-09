@@ -93,6 +93,9 @@
                         </goals>
                         <configuration>
                             <executable>docker</executable>
+                            <environmentVariables>
+                                <DOCKER_HOST>${docker.host}</DOCKER_HOST>
+                            </environmentVariables>
                             <arguments>
                                 <argument>build</argument>
                                 <argument>-t</argument>
@@ -109,9 +112,12 @@
                         </goals>
                         <configuration>
                             <executable>bash</executable>
+                            <environmentVariables>
+                                <DOCKER_HOST>${docker.host}</DOCKER_HOST>
+                            </environmentVariables>
                             <arguments>
                                 <argument>-c</argument>
-                                <argument>docker build ${docker.extra.hosts} https://github.com/wso2/docker-apim.git#master:dockerfiles/ubuntu/apim -t ${apim.docker.image.name} --build-arg WSO2_SERVER=${apim.server.name} --build-arg WSO2_SERVER_DIST_URL=http://host.docker.internal:8000/${apim.server.name}.zip</argument>
+                                <argument>set -e; BUILD_CTX="${project.build.directory}/apim-build-context"; rm -rf "$BUILD_CTX"; mkdir -p "$BUILD_CTX"; cp "${project.basedir}/src/main/resources/apim/Dockerfile" "$BUILD_CTX/"; cp "${project.basedir}/src/main/resources/apim/docker-entrypoint.sh" "$BUILD_CTX/"; cp "${project.basedir}/../../../distribution/product/target/${apim.server.name}.zip" "$BUILD_CTX/product.zip"; docker build ${docker.extra.hosts} "$BUILD_CTX" -t ${apim.docker.image.name} --build-arg WSO2_SERVER=${apim.server.name}</argument>
                             </arguments>
                         </configuration>
                     </execution>

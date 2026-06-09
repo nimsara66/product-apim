@@ -1,3 +1,4 @@
+@cleanup
 Feature: Governance Policy Baseline
   This feature validates baseline governance policy lifecycle operations.
 

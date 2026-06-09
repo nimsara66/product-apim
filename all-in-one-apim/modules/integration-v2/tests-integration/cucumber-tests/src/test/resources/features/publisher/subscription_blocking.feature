@@ -1,3 +1,4 @@
+@cleanup
 Feature: Subscription Blocking
   This feature validates that blocking and unblocking a subscription changes runtime invocation behavior.
 

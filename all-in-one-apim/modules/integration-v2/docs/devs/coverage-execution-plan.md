@@ -27,9 +27,12 @@ This plan keeps the underlying structure unchanged:
 
 ## Current Baseline
 
-- `integration-v2` currently covers `common`, `publisher`, `migration`, `header`, and initial `restart`.
-- Major gaps remain in throttling, GraphQL, streaming APIs, governance/workflows, admin, schema,
-  analytics/logging, and benchmark decisions.
+- `integration-v2` currently has supported-scope coverage in common bootstrap/tenant setup and core
+  token/OAuth flows, with verified parity-baseline and default-suite execution evidence.
+- `integration-v2` also covers `publisher`, `migration`, `header`, and initial `restart`, but several
+  domains are still only partial in breadth.
+- Major remaining gaps are in deeper runtime invocation breadth, throttling, GraphQL, streaming APIs,
+  governance/workflows, admin, schema, analytics/logging, and benchmark decisions.
 - Lane model exists and is usable, but domain depth is uneven.
 
 ## Workstreams
@@ -46,7 +49,7 @@ This plan keeps the underlying structure unchanged:
 
 ### B. Coverage Migration Waves
 
-- Wave 1: close core runtime and application edge cases
+- Wave 1: close core runtime, publisher, and application edge-case breadth
 - Wave 2: throttling and policy governance
 - Wave 3: specialized API types (GraphQL, streaming)
 - Wave 4: operational and platform features (workflow, analytics/logging, schema, admin)
@@ -73,25 +76,26 @@ Exit Criteria:
 - Parity tracker contains owner, target, and evidence for all in-progress/review domains.
 - CI dashboards show lane-level pass rates.
 
-## Phase 1 (Weeks 2-4): Core Runtime Completion
+## Phase 1 (Weeks 2-4): Core Runtime and Publisher Breadth
 
 Target Domains:
 
 - API invocation/runtime basics
 - application management edge cases
-- token and OAuth variants
+- publisher core flows
 - restart persistence hardening
 
 Execution:
 
 - Add negative-path and eventual-consistency scenarios for invocation and subscription state.
-- Add multi-tenant and role-variant scenarios for key token flows.
+- Add multi-tenant and role-variant scenarios for publisher and application lifecycle flows.
 - Extend restart lane with at least two additional restart persistence scenarios beyond token persistence.
+- Fold the newer parity-baseline publisher runners into the main default suite once stable.
 
 Exit Criteria:
 
 - `smoke` and `core` stable with at least 95 percent pass rate over 7 consecutive days.
-- Invocation, application, and token domains move from `partial` to `in-progress` with evidence.
+- Invocation, application, and publisher-core domains gain broader negative-path coverage with evidence.
 
 ## Phase 2 (Weeks 5-7): Throttling and Governance Foundation
 
@@ -110,7 +114,7 @@ Execution:
 Exit Criteria:
 
 - At least one `core` and one `extended` scenario exists for each of the three domains.
-- Throttling and governance domains move from `planned` to `in-progress`.
+- Throttling and governance domains have passing breadth beyond the current parity-baseline happy paths.
 
 ## Phase 3 (Weeks 8-9): Specialized API Types
 
@@ -127,7 +131,7 @@ Execution:
 Exit Criteria:
 
 - GraphQL and streaming domains each have minimum viable coverage in `extended`.
-- Both domains move from `planned` to `in-progress` with evidence.
+- Both domains extend beyond create/publish baselines into invocation and policy validation.
 
 ## Phase 4 (Weeks 10-11): Platform Features
 
@@ -180,6 +184,7 @@ A domain can move to `done` only when all are true:
 - `core` median runtime less than or equal to 45 minutes.
 - Lane flakiness less than or equal to 2 percent (rerun-adjusted).
 - Each in-progress domain adds at least 2 net-new scenarios per sprint until `done`.
+- Effective verified parity increases sprint over sprint from the current `49.1%` baseline.
 
 ## RACI (Suggested)
 
@@ -190,11 +195,11 @@ A domain can move to `done` only when all are true:
 
 ## Immediate Next Sprint Backlog
 
-1. Add parity-tracker metadata columns: owner, target release, evidence link.
-2. Complete API invocation edge-case scenario pack (invalid, revoked, blocked, delayed consistency).
+1. Complete API invocation edge-case scenario pack (invalid, revoked, blocked, delayed consistency).
+2. Fold the passing parity-baseline publisher runners into the default `testng.xml` lane safely.
 3. Add two restart persistence scenarios beyond token persistence.
-4. Add first throttling baseline scenarios and mark domain as `in-progress` once passing.
-5. Enable nightly report aggregation by lane.
+4. Expand throttling beyond the current subscription-plan baseline with API-level and policy assertions.
+5. Enable nightly report aggregation by lane and publish effective verified parity alongside structural parity.
 
 ## How to Use This Plan
 

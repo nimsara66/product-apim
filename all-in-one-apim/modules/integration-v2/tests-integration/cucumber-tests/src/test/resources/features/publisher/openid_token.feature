@@ -1,3 +1,4 @@
+@cleanup
 Feature: OpenID Token
   This feature validates OpenID scope token generation and userinfo access.
 

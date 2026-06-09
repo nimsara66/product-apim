@@ -15,11 +15,9 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.GraphQLApiBaselineRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.WebSocketApiBaselineRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.GovernancePolicyBaselineRunner"/>
-        </classes>
-    </test>
-
-    <test name="ParityBaselineShutdown" preserve-order="true">
-        <classes>
+            <!-- Shutdown must be the last class in this single test so it always runs after every
+                 scenario. Keeping it in a separate <test> let it run in parallel (and out of order)
+                 whenever the suite listener forces ParallelMode.TESTS, causing a null-container NPE. -->
             <class name="org.wso2.am.integration.cucumbertests.runners.common.SystemShutdown"/>
         </classes>
     </test>

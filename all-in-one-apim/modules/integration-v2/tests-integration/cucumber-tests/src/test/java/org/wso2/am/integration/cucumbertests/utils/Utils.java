@@ -57,6 +57,16 @@ public class Utils {
         return baseUrl + Constants.DEFAULT_APIM_TOKEN_EP;
     }
 
+    public static String getUserInfoEndpointURL(String baseUrl) {
+
+        return baseUrl + Constants.DEFAULT_APIM_USERINFO_EP;
+    }
+
+    public static String getRevokeEndpointURL(String baseUrl) {
+
+        return baseUrl + Constants.DEFAULT_APIM_REVOKE_EP;
+    }
+
     public static String getAPICreateEndpointURL(String baseUrl, String resourceType) {
         return baseUrl + Constants.DEFAULT_APIM_API_DEPLOYER + resourceType;
     }

@@ -1,3 +1,4 @@
+@cleanup
 Feature: API Key Invocation
   This feature validates API-key-based invocation for a standard published API in the default v2 suite.
 

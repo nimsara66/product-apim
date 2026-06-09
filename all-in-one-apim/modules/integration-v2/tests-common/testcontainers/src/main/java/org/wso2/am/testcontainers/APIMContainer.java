@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class APIMContainer extends GenericContainer<APIMContainer> {
 
     private static final Logger logger = LoggerFactory.getLogger(APIMContainer.class);
+    private static final String DEFAULT_APIM_IMAGE = "wso2am:4.7.0-SNAPSHOT-jdk21";
 
     private static final AtomicInteger offsetCounter = new AtomicInteger();
     private final int httpPort;
@@ -42,7 +43,7 @@ public class APIMContainer extends GenericContainer<APIMContainer> {
 
     public APIMContainer(String containerLabel, String deploymentTomlContent) {
 
-        super(System.getProperty("apim.docker.image.name"));
+        super(System.getProperty("apim.docker.image.name", DEFAULT_APIM_IMAGE));
 
         String apim_db_url = System.getenv(Constants.API_MANAGER_DATABASE_URL);
         String shared_db_url = System.getenv(Constants.SHARED_DATABASE_URL);

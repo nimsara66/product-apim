@@ -69,16 +69,16 @@ public class ContainerInitializationSteps {
 
         APIMContainer apimContainer = new APIMContainer(label, tomlContent);
         apimContainer.start();
-        TestContext.set("apimContainer", apimContainer);
+        TestContext.setShared("apimContainer", apimContainer);
 
         // Verifying that the deployment.toml file was copied correctly by logging its content
         String filePathInsideContainer = apimContainer.getContainerTomlPath();
         String fileContents = apimContainer.execInContainer("cat", filePathInsideContainer).getStdout();
         logger.info("Contents of the copied deployment.toml inside the container: \n {}", fileContents);
 
-        TestContext.set("baseUrl", apimContainer.getAPIManagerUrl());
-        TestContext.set("baseGatewayUrl", apimContainer.getGatewayUrl());
-        TestContext.set("label", label);
+        TestContext.setShared("baseUrl", apimContainer.getAPIManagerUrl());
+        TestContext.setShared("baseGatewayUrl", apimContainer.getGatewayUrl());
+        TestContext.setShared("label", label);
     }
 
     /**
