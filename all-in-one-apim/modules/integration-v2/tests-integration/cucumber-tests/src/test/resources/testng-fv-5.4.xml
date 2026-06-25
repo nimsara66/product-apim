@@ -12,7 +12,6 @@
 <suite name="Framework Verification 5.4" parallel="false">
     <listeners>
         <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockLifecycleListener"/>
-        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockScopeListener"/>
     </listeners>
     <test name="Phase5.4-LegacyParity">
         <classes>
