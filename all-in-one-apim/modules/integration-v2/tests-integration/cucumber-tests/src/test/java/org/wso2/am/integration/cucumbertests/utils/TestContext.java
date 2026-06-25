@@ -17,6 +17,8 @@
 
 package org.wso2.am.integration.cucumbertests.utils;
 
+import org.testng.ITestContext;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +28,16 @@ public class TestContext {
 
     private static final String DEFAULT_SHARED_SCOPE = "global-shared";
     private static final String DEFAULT_LOCAL_SCOPE = "global-local";
+
+    /**
+     * Derives the shared-scope id for a TestNG {@code <test>} block, namespaced by suite name so two
+     * blocks of the same {@code <test name>} living in different suites cannot merge shared state.
+     * This is the single source of truth for the shared-scope key — listeners that set the scope per
+     * invocation and any onStart lifecycle wiring must both derive the key through this method.
+     */
+    public static String sharedScopeId(ITestContext ctx) {
+        return ctx.getSuite().getName() + "::" + ctx.getName();
+    }
 
     private static final Map<String, Map<String, Object>> sharedContexts = new ConcurrentHashMap<>();
     private static final Map<String, Map<String, Object>> localContexts = new ConcurrentHashMap<>();
@@ -48,6 +60,22 @@ public class TestContext {
 
     public static void clearScope() {
         currentScope.remove();
+    }
+
+    /**
+     * Number of distinct shared-scope maps currently retained. Test-observability only — lets the
+     * scope-leak verification assert that finished blocks' entries are reclaimed (no per-block buildup).
+     */
+    public static int sharedScopeCount() {
+        return sharedContexts.size();
+    }
+
+    /**
+     * Number of distinct local-scope maps currently retained. Test-observability only — lets the
+     * scope-leak verification assert that finished blocks' entries are reclaimed (no per-block buildup).
+     */
+    public static int localScopeCount() {
+        return localContexts.size();
     }
 
     public static void set(String key, Object value) {

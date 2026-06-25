@@ -28,6 +28,7 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testng.Assert;
+import org.wso2.am.integration.cucumbertests.utils.ServerReadiness;
 import org.wso2.am.integration.cucumbertests.utils.TestContext;
 import org.wso2.am.integration.test.utils.Constants;
 import org.wso2.am.integration.cucumbertests.utils.Utils;
@@ -472,28 +473,9 @@ public class BaseSteps {
      * Waits for the APIM server to be ready by polling the gateway health check endpoint.
      */
     @Then("I wait for the APIM server to be ready")
-    public void waitForAPIMServerToBeReady() throws IOException, InterruptedException {
+    public void waitForAPIMServerToBeReady() {
 
-        String url = Utils.getGatewayHealthCheckURL(getBaseUrl());
-        long currentTime = System.currentTimeMillis();
-        long waitTime = currentTime + Constants.SERVER_STARTUP_WAIT_TIME;
-        boolean isServerReady = false;
-
-        while (System.currentTimeMillis() < waitTime) {
-            HttpResponse response = null;
-            try {
-                response = SimpleHTTPClient.getInstance().doGet(url, null);
-            } catch (IOException ignored) {}
-            if (response != null && response.getResponseCode() == 200) {
-                    isServerReady = true;
-                    break;
-            }
-            try {
-                logger.info("Waiting for APIM server to be ready...");
-                Thread.sleep(1000);
-            } catch (InterruptedException ignored) {
-            }
-        }
+        boolean isServerReady = ServerReadiness.awaitReady(getBaseUrl());
         Assert.assertTrue(isServerReady, "APIM server is not ready even after waiting for " +
                 Constants.DEPLOYMENT_WAIT_TIME /60000 + " minutes");
     }
