@@ -768,3 +768,28 @@ whole-system safety rather than a single phase.
   Recommended: keep reuse + the label sweep for CI cleanliness; add the shutdown hook only if
   interactive Ctrl-C leaks become a developer nuisance. Re-enable Ryuk only if RAM exhaustion
   from leaked containers is observed on the shared host.
+- **Shared `NodeAppServer` backend under parallelism.** The API backend (`NodeAppServer`) is the
+  original (2025) model and was left untouched by the parallel-on-shared-container work. It is a
+  per-JVM singleton (`InstanceHolder`) joined to the static `ContainerNetwork.SHARED_NETWORK` under
+  alias `nodebackend`; every `DynamicApimContainer` joins the same network, so all APIM nodes —
+  however many run concurrently — proxy to the *one* shared backend by Docker DNS alias (fixed
+  container ports 3000–3017, no host-port contention). This sharing is fine for stateless
+  request/response, but `NodeAppServer.restart()` stops+starts the shared container, is not
+  synchronized, and is called by `MigratedSharedScopesRunner` and `APIPoliciesRunner`. Harmless in
+  the sequential legacy lane, but if either runner is ever composed into a block that runs in
+  parallel with another block (Tier 4 / capstone, K>1), the restart will break the other block's
+  in-flight backend calls. Later, when real runners move onto the shared-classes lane: either give
+  each block its own backend, isolate the two restart-callers to a serialized block, or make
+  `restart()` a no-op/guarded under parallel execution.
+- **`deepMerge` cannot delete keys.** The block toml is now expressed as a small *overlay*
+  merged (`Utils.mergeToml` → `deepMerge`) onto the product distribution's
+  `deployment.toml` (the base shipped inside the image). `deepMerge` recurses into nested
+  tables and otherwise adds-or-overrides; it has no way to *remove* a key the base defines.
+  So any distribution-only block the test config would have dropped is silently inherited.
+  Two such blocks are intentionally tolerated rather than worked around:
+    - `[[oauth.extensions.token_types]]` (the JWT issuer entry), and
+    - `[apim.analytics] type = "moesif"` (the overlay re-asserts `enable = false` and adds
+      `auth_token = ""`, but cannot strip the inherited `type`).
+  Both are harmless to the current suites. If a future test genuinely needs a key removed,
+  extend the merge with a delete directive (e.g. a sentinel/null convention) rather than
+  reverting to a full-file toml copy.

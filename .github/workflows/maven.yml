@@ -8,10 +8,12 @@ on:
     branches:
       - master
 concurrency:
-  group: ${{ github.event.number }}
+  group: ${{ github.event.number || github.ref }}
   cancel-in-progress: true
 jobs:
   build:
+    # TEMP (testing): skip on manual runs so workflow_dispatch executes only integration-v2. Revert before merge.
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -68,6 +70,8 @@ jobs:
       with:
         flags: integration_tests
   run-benchmark-test:
+    # TEMP (testing): skip on manual runs so workflow_dispatch executes only integration-v2. Revert before merge.
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Run hostname
@@ -95,7 +99,8 @@ jobs:
       - name: Build product-apim with Test.
         run: mvn clean install -U --file all-in-one-apim/pom.xml -DskipIntegrationTests=true
   show-report:
-    if: ${{ always() && !cancelled() }}
+    # TEMP (testing): skip on manual runs so workflow_dispatch executes only integration-v2. Revert before merge.
+    if: ${{ always() && !cancelled() && github.event_name != 'workflow_dispatch' }}
     needs: build
     runs-on: 'ubuntu-latest'
     steps:
@@ -107,3 +112,44 @@ jobs:
         uses: malinthaprasan/action-surefire-report@v1
         with:
           report_paths: 'reports/**/TEST-*.xml'
+  integration-v2:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: v2-1
+            suite: testng-v2.xml
+    steps:
+      - name: Run hostname
+        run: hostname
+      - name: Fix host entry
+        run: sudo echo "127.0.0.1 $(hostname)" | sudo tee -a /etc/hosts
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      - name: Build APIM distribution (skip tests)
+        run: >
+          mvn clean install -f all-in-one-apim/pom.xml
+          -Dmaven.test.skip=true -DskipBenchMarkTest=true -DskipRestartTests=true
+      - name: Run integration-v2 suite (H2, parallel-on-shared-container)
+        working-directory: all-in-one-apim/modules/integration-v2
+        run: >
+          mvn install -pl tests-integration/cucumber-tests -am
+          -Dsurefire.suite.xml=${{ matrix.suite }}
+          -Ddocker.extra.hosts="--add-host=host.docker.internal:host-gateway"
+      - name: Archive test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-v2-reports-${{ matrix.id }}
+          path: |
+            all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/target/surefire-reports/**
+            all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/target/cucumber-report/**
+          if-no-files-found: warn

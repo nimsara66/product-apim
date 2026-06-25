@@ -27,6 +27,7 @@ import org.wso2.am.integration.cucumbertests.utils.ModulePathResolver;
 import org.wso2.am.integration.cucumbertests.utils.ServerReadiness;
 import org.wso2.am.integration.cucumbertests.utils.TenantUserProvisioner;
 import org.wso2.am.integration.cucumbertests.utils.TestContext;
+import org.wso2.am.integration.cucumbertests.utils.Utils;
 import org.wso2.am.integration.test.utils.Constants;
 import org.wso2.am.testcontainers.DynamicApimContainer;
 
@@ -165,14 +166,16 @@ public class BlockLifecycleListener implements ITestListener {
 
     private String resolveTomlContent(ITestContext context) throws java.io.IOException {
         String overlayPath = param(context, PARAM_TOML_OVERLAY);
-        Path tomlPath;
         if (overlayPath != null && !overlayPath.isBlank()) {
-            tomlPath = Path.of(overlayPath);
-        } else {
-            String moduleDir = ModulePathResolver.getModuleDir(BlockLifecycleListener.class);
-            tomlPath = Paths.get(moduleDir, Constants.DEFAULT_TOML_PATH);
+            // Explicit full-file replacement: the block supplies a complete deployment.toml verbatim.
+            return Files.readString(Path.of(overlayPath));
         }
-        return Files.readString(tomlPath);
+        // Default lane: merge the small basic overlay onto the product distribution toml (the base
+        // shipped in the image), so the test config tracks distribution defaults instead of a stale copy.
+        String moduleDir = ModulePathResolver.getModuleDir(BlockLifecycleListener.class);
+        Path basePath = Paths.get(moduleDir, Constants.DISTRIBUTION_TOML_PATH).normalize();
+        Path overlay = Paths.get(moduleDir, Constants.DEFAULT_TOML_PATH).normalize();
+        return Utils.mergeToml(basePath.toString(), overlay.toString());
     }
 
     private String param(ITestContext context, String name) {
