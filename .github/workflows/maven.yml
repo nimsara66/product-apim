@@ -152,4 +152,5 @@ jobs:
           path: |
             all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/target/surefire-reports/**
             all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/target/cucumber-report/**
+            all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/target/logs/**
           if-no-files-found: warn

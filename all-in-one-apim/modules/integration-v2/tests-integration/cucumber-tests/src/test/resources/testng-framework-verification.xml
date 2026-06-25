@@ -18,9 +18,10 @@
                          shared-var override.
     * Phase6.1-BrokenBlock - initTenantUsers=true, tenantSet=adpsample. On a FRESH (non-migrated) container
                          adpsample.com does not exist server-side, so provisioning throws inside onStart and
-                         is recorded as bootError; BaseBlockRunner turns that into a clean SkipException. The
-                         gate asserts this block SKIPS cleanly (skipped>=1, failed=0) while A & B PASS, and
-                         that its container is still released by onFinish (no leak).
+                         is recorded as bootError; BaseBlockRunner rethrows that as a hard IllegalStateException
+                         (a @BeforeClass config FAILURE). The gate asserts this block FAILS the build (red) in
+                         isolation - recorded as an abortIfBlockBootFailed config FAILURE - while A & B PASS,
+                         and that its container is still released by onFinish (no leak).
 
   Wired to no legacy runners, so running it cannot affect the legacy testng.xml run.
 -->

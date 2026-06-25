@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 #
-# Phase 5.5 verification — a provisioning failure in onStart SKIPS the block cleanly.
+# Phase 5.5 verification — a provisioning failure in onStart FAILS the block (build red).
 #
 # testng-fv-5.5.xml boots ONE REAL APIM block (block=fv-5.5) with initTenantUsers=true and
 # tenantSet=adpsample. adpsample is the pre-migrated profile: addAdpsampleTenant only builds a context bean
 # (no SOAP create), so on this FRESH (non-migrated) container adpsample.com does not exist server-side. The
 # follow-up addUser SOAP authenticates as admin@adpsample.com and gets a non-200, so TenantUserProvisioner
 # throws. Because provisioning runs inside BlockLifecycleListener.onStart's try, the throw is recorded as the
-# bootError attribute (NOT surfaced mid-scenario), and BaseBlockRunner's @BeforeClass turns it into a
-# SkipException - the probe class is reported SKIPPED with the provisioning failure as root cause.
+# bootError attribute (NOT surfaced mid-scenario), and BaseBlockRunner's @BeforeClass rethrows it as a hard
+# IllegalStateException - the probe class FAILS (a @BeforeClass config FAILURE) with the provisioning failure
+# as root cause.
 #
-# Asserts, after the run: Maven build SUCCEEDS (a clean skip is not a build failure); testng-results shows
-# skipped>=1 and failed=0 (skipped cleanly, no NPE cascade); the Maven log carries the listener's
-# boot-failure marker (the skip really came from the provisioning failure, not something else); the probe
-# never ran, so NO block observation was recorded; and the container did not leak - onFinish stopped it even
-# though provisioning failed after boot. Re-runnable / idempotent. Single PASS/FAIL line, non-zero on fail.
+# Asserts, after the run: Maven build FAILS (a boot failure must redden the build, not skip-to-green); the
+# guard's abortIfBlockBootFailed config method is recorded FAILED (CONFIG_FAILS>=1), no NPE cascade; the
+# Maven log carries the listener's boot-failure marker (the failure really came from the provisioning
+# failure, not something else); the probe never ran, so NO block observation was recorded; and the container
+# did not leak - onFinish stopped it even though provisioning failed after boot. Re-runnable / idempotent.
+# Single PASS/FAIL line, non-zero on fail.
 #
 # Usage:  ./verify-5.5.sh
 set -euo pipefail
@@ -46,36 +48,38 @@ cleanup_containers() {
 # Always clean up on exit so a crashed run never poisons the next.
 trap cleanup_containers EXIT
 
-echo "== Phase ${STEP} verification: provisioning failure skips the block cleanly =="
+echo "== Phase ${STEP} verification: provisioning failure FAILS the block (build red) =="
 rm -f "${OBS_FILE}" "${MVN_LOG}"
 cleanup_containers
 
+# A provisioning failure must FAIL the build (regression guard against silent skip-to-green): Maven must exit
+# non-zero. We run inside `if` so set -e does not abort on the expected failure; the redirect to the log is
+# preserved for diagnostics.
 echo "Running verification suite via Maven..."
-if ! ( cd "${REACTOR_DIR}" && mvn -q -pl tests-integration/cucumber-tests -am \
+if ( cd "${REACTOR_DIR}" && mvn -q -pl tests-integration/cucumber-tests -am \
         -Dsurefire.suite.xml="${SUITE_XML}" test ) > "${MVN_LOG}" 2>&1; then
     tail -25 "${MVN_LOG}"
-    fail "Maven build failed - a clean skip must NOT fail the build (see ${MVN_LOG})"
+    fail "Maven build SUCCEEDED - a provisioning failure must FAIL the build, not skip-to-green (see ${MVN_LOG})"
 fi
 
-# Assertion 1: the block was SKIPPED cleanly - skipped>=1 and zero failures (no NPE cascade).
+# Assertion 1: the guard rethrew the bootError as a @BeforeClass config FAILURE (no NPE cascade). (TestNG
+# marks the class's @Test methods SKIPPED, but the failed config method is what reddens the build, so we
+# assert on the config-method FAIL - not the root 'failed' attribute, which counts only @Test methods.)
 [ -f "${RESULTS_XML}" ] || fail "testng-results.xml not produced: ${RESULTS_XML}"
-HEADER="$(grep -o '<testng-results[^>]*>' "${RESULTS_XML}" | head -1)"
-get_attr() { printf '%s' "${HEADER}" | sed -n "s/.* $1=\"\\([0-9]*\\)\".*/\\1/p"; }
-FAILED="$(get_attr failed)"; SKIPPED="$(get_attr skipped)"
-[ "${FAILED}" = "0" ] || fail "expected failed=0 (clean skip, not a failure cascade), got '${FAILED}' (${HEADER})"
-[ -n "${SKIPPED}" ] && [ "${SKIPPED}" -ge 1 ] \
-    || fail "expected skipped>=1 (the block must skip on provisioning failure), got '${SKIPPED}' (${HEADER})"
+CONFIG_FAILS="$(grep 'abortIfBlockBootFailed' "${RESULTS_XML}" | grep -c 'status="FAIL"' || true)"
+[ "${CONFIG_FAILS}" -ge 1 ] \
+    || fail "expected >=1 abortIfBlockBootFailed config FAILURE (the block must fail on provisioning failure), got ${CONFIG_FAILS}"
 
-# Assertion 2: the skip really came from the provisioning failure recorded by the listener.
+# Assertion 2: the failure really came from the provisioning failure recorded by the listener.
 grep -q "boot/readiness failed" "${MVN_LOG}" \
-    || fail "Maven log lacks the listener's boot-failure marker - skip may not be provisioning-driven (see ${MVN_LOG})"
+    || fail "Maven log lacks the listener's boot-failure marker - failure may not be provisioning-driven (see ${MVN_LOG})"
 
-# Assertion 3: the probe never ran (skipped before its scenario), so it recorded no observation.
+# Assertion 3: the probe never ran (failed before its scenario), so it recorded no observation.
 [ ! -f "${OBS_FILE}" ] \
-    || fail "an observation was recorded - the skipped probe unexpectedly ran its scenario: ${OBS_FILE}"
+    || fail "an observation was recorded - the failed probe unexpectedly ran its scenario: ${OBS_FILE}"
 
 # Assertion 4: the container did not leak - onFinish stopped it despite the post-boot provisioning failure.
 LEFTOVER="$(docker ps -aq --filter "${LABEL_FILTER}" 2>/dev/null || true)"
-[ -z "${LEFTOVER}" ] || fail "fv-5.5 container leaked after a provisioning-failure skip: ${LEFTOVER}"
+[ -z "${LEFTOVER}" ] || fail "fv-5.5 container leaked after a provisioning-failure FAIL: ${LEFTOVER}"
 
-echo "VERIFY ${STEP}: PASS - provisioning failure recorded as bootError; block SKIPPED cleanly (skipped=${SKIPPED}, failed=0), probe never ran, container released by onFinish, no leak"
+echo "VERIFY ${STEP}: PASS - provisioning failure recorded as bootError; block FAILED (build red) via ${CONFIG_FAILS} config FAILURE(s), probe never ran, container released by onFinish, no leak"

@@ -13,8 +13,11 @@
 # footprint. Then it asserts the host genuinely has headroom for the chosen K and records the data.
 #
 # Assertions:
-#   1. The capstone run SUCCEEDS and produces all expected observations - i.e. at K=2 on THIS host every
-#      good block became ready in time (no boot-timeout cascade) and nothing was OOM-killed mid-boot.
+#   1. The capstone produces all expected observations - i.e. at K=2 on THIS host every good block became
+#      ready in time (no boot-timeout cascade) and nothing was OOM-killed mid-boot. NOTE: the capstone's
+#      BrokenBlock is now EXPECTED to redden the build (its boot failure is a hard config FAILURE, not a
+#      skip), so the Maven exit code is non-zero by design and is NOT the capacity signal; capacity is
+#      certified by the good blocks' observations instead.
 #   2. Peak live containers reached the chosen K (K=2 genuinely ran at once - capacity was actually exercised).
 #   3. A real per-container footprint was measured (> 0 MiB) and recorded.
 #   4. Headroom: the measured peak AGGREGATE footprint stayed at/under HEADROOM_PCT of the Docker host's
@@ -112,12 +115,15 @@ while kill -0 "${MVN_PID}" 2>/dev/null; do
 done
 wait "${MVN_PID}" && MVN_RC=0 || MVN_RC=$?
 
-# Assertion 1: capstone succeeded with all observations - no OOM/boot-timeout cascade at this K on this host.
-[ "${MVN_RC}" = "0" ] || { tail -25 "${MVN_LOG}"; fail "capstone build failed at K=${K} - host could not run the chosen K cleanly (see ${MVN_LOG})"; }
-[ -f "${OBS_FILE}" ] || fail "no observation file produced: ${OBS_FILE} (a block likely failed to become ready - capacity/boot-timeout)"
+# Assertion 1: capacity is certified by the good blocks' OBSERVATIONS, not the Maven exit code. The
+# capstone's BrokenBlock now reddens the build by design (its boot failure is a hard config FAILURE, not a
+# skip), so MVN_RC is expected non-zero and is NOT a capacity signal. The real signal is that all good-block
+# observations landed: if a good block had OOM'd or hit a boot-timeout under load at this K, it would be
+# missing its observations. (MVN_RC is only used in a diagnostic tail below.)
+[ -f "${OBS_FILE}" ] || { [ "${MVN_RC}" = "0" ] || tail -25 "${MVN_LOG}"; fail "no observation file produced: ${OBS_FILE} (a block likely failed to become ready - capacity/boot-timeout)"; }
 OBS_COUNT="$(grep -c . "${OBS_FILE}" || true)"
 [ "${OBS_COUNT}" = "${EXPECTED_OBS}" ] \
-    || fail "expected ${EXPECTED_OBS} observations at K=${K}, got ${OBS_COUNT} - a block may have hit a boot-timeout under load (see ${MVN_LOG})"
+    || { [ "${MVN_RC}" = "0" ] || tail -25 "${MVN_LOG}"; fail "expected ${EXPECTED_OBS} observations at K=${K}, got ${OBS_COUNT} - a block may have hit a boot-timeout under load (see ${MVN_LOG})"; }
 
 # Assertion 2: the chosen K was actually exercised (K containers ran at once).
 [ "${MAX_LIVE}" -ge "${K}" ] \

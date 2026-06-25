@@ -19,19 +19,19 @@ package org.wso2.am.integration.cucumbertests.runners.block;
 
 import io.cucumber.testng.AbstractTestNGCucumberTests;
 import org.testng.ITestContext;
-import org.testng.SkipException;
 import org.testng.annotations.BeforeClass;
 
 /**
  * Base class for runners in the parallel-on-shared-container lane. Each {@code <test>} block boots a
  * single APIM container in {@code BlockLifecycleListener.onStart} (Phase 4.2); every test class in the
- * block extends this runner to inherit the boot-failure skip guard below, so authors write no lifecycle
+ * block extends this runner to inherit the boot-failure guard below, so authors write no lifecycle
  * code of their own.
  *
  * <p>When {@code onStart} fails to boot/ready the block's container it records the cause as the
- * {@code bootError} attribute on the {@link ITestContext} instead of throwing. This guard then converts
- * that into a {@link SkipException} per class, so the block's classes are reported SKIPPED (with the boot
- * error as the single root cause) rather than FAILED with an NPE cascade from the absent container.
+ * {@code bootError} attribute on the {@link ITestContext} instead of throwing. This guard then rethrows
+ * that cause as a {@code @BeforeClass} configuration FAILURE per class, so the block's classes are
+ * reported FAILED (with the boot error as the single root cause) and the run exits non-zero. It must not
+ * skip: a skipped block leaves the build green even though its server never came up, masking the failure.
  */
 public abstract class BaseBlockRunner extends AbstractTestNGCucumberTests {
 
@@ -41,7 +41,7 @@ public abstract class BaseBlockRunner extends AbstractTestNGCucumberTests {
     void abortIfBlockBootFailed(ITestContext context) {
         Object bootError = context.getAttribute(BOOT_ERROR_ATTRIBUTE);
         if (bootError != null) {
-            throw new SkipException("APIM block boot failed", (Throwable) bootError);
+            throw new IllegalStateException("APIM block boot failed", (Throwable) bootError);
         }
     }
 }

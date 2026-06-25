@@ -42,8 +42,9 @@ import java.nio.file.Paths;
  * the block sees one ready server; {@code onFinish} stops that container and clears the scope.
  *
  * <p>If boot or readiness fails it records the cause as the {@code bootError} attribute (consumed by
- * {@code BaseBlockRunner}'s skip guard) instead of throwing, so the block's classes are reported SKIPPED
- * with a single root cause rather than failing with an NPE cascade from the absent container.
+ * {@code BaseBlockRunner}'s guard) instead of throwing, so the block's classes are reported FAILED with a
+ * single root cause rather than failing with an NPE cascade from the absent container. The build stays red
+ * — a boot failure must never be reported as a skip, which would leave the run green.
  *
  * <p>Registered only in the new-lane verification suite; the legacy testng.xml is untouched.
  */

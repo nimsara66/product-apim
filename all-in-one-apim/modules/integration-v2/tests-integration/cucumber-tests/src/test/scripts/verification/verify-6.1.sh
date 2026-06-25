@@ -9,12 +9,13 @@
 #   * Phase6.1-BlockA      - default tenant set provisioned in onStart; TWO probe classes share its container.
 #   * Phase6.1-BlockB      - default tenant set provisioned in onStart; TWO probe classes share its container.
 #   * Phase6.1-BrokenBlock - tenantSet=adpsample on a FRESH container; provisioning throws in onStart and is
-#                            recorded as bootError, so BaseBlockRunner SKIPS the class cleanly.
-# Each non-skipped probe records an observation (millis|thread|containerId|baseUrl|baseGatewayUrl).
+#                            recorded as bootError, so BaseBlockRunner FAILS the class (build red).
+# Each non-failed probe records an observation (millis|thread|containerId|baseUrl|baseGatewayUrl).
 #
 # While Maven runs, this polls `docker ps` for the live count of block containers and tracks the peak.
 # Asserts, after the run (the full 6.1 checklist):
-#   1. Build SUCCEEDS - a clean skip is not a build failure, and the two good blocks passed.
+#   1. Build FAILS - the broken block reddens the build (a boot failure is never a silent skip-to-green),
+#      while the two good blocks still pass in isolation.
 #   2. Readiness + observations - exactly 4 observations (2 classes x 2 good blocks); the broken block's
 #      class never ran, so it recorded none. No 'none'/'null' container id.
 #   3. Isolation - exactly 2 DISTINCT container ids AND 2 DISTINCT baseUrls (distinct mapped ports), and each
@@ -22,8 +23,9 @@
 #      with no cross-block override under the suiteName::testName namespace.
 #   4. Cap K - peak live containers never exceeded K=2 but reached 2 (blocks truly overlapped, K is a real bound).
 #   5. Per-block cap M - within each good block at most M=2 distinct worker threads were used.
-#   6. Clean skip - testng-results shows skipped>=1 and failed=0, and the Maven log carries the listener's
-#      boot-failure marker (the skip really came from the broken block's provisioning failure).
+#   6. Build red in isolation - the broken block's abortIfBlockBootFailed is recorded as a @BeforeClass config
+#      FAILURE (CONFIG_FAILS>=1), and the Maven log carries the listener's boot-failure marker (the failure
+#      really came from the broken block's provisioning failure).
 #   7. Release - zero fv-6.1 containers leaked (every block, including the broken one, released its container).
 # Re-runnable / idempotent. Prints a single PASS/FAIL line, non-zero on fail.
 #
@@ -79,8 +81,9 @@ while kill -0 "${MVN_PID}" 2>/dev/null; do
 done
 wait "${MVN_PID}" && MVN_RC=0 || MVN_RC=$?
 
-# Assertion 1: build succeeded - a clean skip is not a failure, and the two good blocks passed.
-[ "${MVN_RC}" = "0" ] || { tail -25 "${MVN_LOG}"; fail "Maven build failed - a clean skip must NOT fail the build, and good blocks must pass (see ${MVN_LOG})"; }
+# Assertion 1: build FAILED - the broken block reddens the build (a boot failure is never a silent
+# skip-to-green); the good blocks still passing in isolation is proven by assertions 2-5 below.
+[ "${MVN_RC}" != "0" ] || { tail -25 "${MVN_LOG}"; fail "Maven build SUCCEEDED - the broken block must FAIL the build, not skip-to-green"; }
 
 # Assertion 2: readiness + observations - the two good blocks each ran both probe classes.
 [ -f "${OBS_FILE}" ] || fail "expected observation file not produced: ${OBS_FILE}"
@@ -120,20 +123,20 @@ while IFS= read -r cid; do
         || fail "block container ${cid} used ${THREADS} distinct worker threads (> per-block cap M=${M})"
 done <<< "${DISTINCT_IDS}"
 
-# Assertion 6 (clean skip): the broken block SKIPPED cleanly (skipped>=1, failed=0) and the skip was
-# provisioning-driven (the listener recorded a boot/readiness failure).
+# Assertion 6 (build red in isolation): the broken block's guard rethrew the bootError as a @BeforeClass
+# config FAILURE (CONFIG_FAILS>=1) and the failure was provisioning-driven (the listener recorded a
+# boot/readiness failure). (TestNG marks the broken class's @Test methods SKIPPED, but the failed config
+# method is what reddens the build, so we assert on the config-method FAIL - not the root 'failed' attribute,
+# which counts only @Test methods and stays 0.)
 [ -f "${RESULTS_XML}" ] || fail "testng-results.xml not produced: ${RESULTS_XML}"
-HEADER="$(grep -o '<testng-results[^>]*>' "${RESULTS_XML}" | head -1)"
-get_attr() { printf '%s' "${HEADER}" | sed -n "s/.* $1=\"\\([0-9]*\\)\".*/\\1/p"; }
-FAILED="$(get_attr failed)"; SKIPPED="$(get_attr skipped)"
-[ "${FAILED}" = "0" ] || fail "expected failed=0 (broken block must SKIP, siblings must PASS), got '${FAILED}' (${HEADER})"
-[ -n "${SKIPPED}" ] && [ "${SKIPPED}" -ge 1 ] \
-    || fail "expected skipped>=1 (the broken block must skip), got '${SKIPPED}' (${HEADER})"
+CONFIG_FAILS="$(grep 'abortIfBlockBootFailed' "${RESULTS_XML}" | grep -c 'status="FAIL"' || true)"
+[ "${CONFIG_FAILS}" -ge 1 ] \
+    || fail "expected >=1 abortIfBlockBootFailed config FAILURE (the broken block), got ${CONFIG_FAILS}"
 grep -q "boot/readiness failed" "${MVN_LOG}" \
-    || fail "Maven log lacks the listener's boot-failure marker - the skip may not be provisioning-driven (see ${MVN_LOG})"
+    || fail "Maven log lacks the listener's boot-failure marker - the failure may not be provisioning-driven (see ${MVN_LOG})"
 
 # Assertion 7 (release): zero containers leaked - every block, including the broken one, released its container.
 LEFTOVER="$(docker ps -aq --filter "${LABEL_FILTER}" 2>/dev/null || true)"
 [ -z "${LEFTOVER}" ] || fail "fv-6.1 containers leaked after run: ${LEFTOVER}"
 
-echo "VERIFY ${STEP}: PASS - ${EXPECTED_GOOD_BLOCKS} good blocks each provisioned+observed their OWN container (${EXPECTED_GOOD_BLOCKS} distinct ids + ${EXPECTED_GOOD_BLOCKS} distinct baseUrls, ${OBS_PER_BLOCK} obs each), peak ${MAX_LIVE} live (cap K=${K}, parallelism observed), <=${M} classes/block at once, broken block SKIPPED cleanly (skipped=${SKIPPED}, failed=0), no leaks"
+echo "VERIFY ${STEP}: PASS - ${EXPECTED_GOOD_BLOCKS} good blocks each provisioned+observed their OWN container (${EXPECTED_GOOD_BLOCKS} distinct ids + ${EXPECTED_GOOD_BLOCKS} distinct baseUrls, ${OBS_PER_BLOCK} obs each), peak ${MAX_LIVE} live (cap K=${K}, parallelism observed), <=${M} classes/block at once, broken block FAILED the build in isolation (${CONFIG_FAILS} config FAILURE(s)), no leaks"

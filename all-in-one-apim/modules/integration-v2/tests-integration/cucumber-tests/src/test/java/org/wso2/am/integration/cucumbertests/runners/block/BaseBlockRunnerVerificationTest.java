@@ -21,15 +21,15 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.testng.Assert;
 import org.testng.ITestContext;
-import org.testng.SkipException;
 import org.testng.annotations.Test;
 
 /**
- * Phase 4.1 verification (Type-A, no Docker): proves the {@link BaseBlockRunner} skip guard turns a
- * recorded {@code bootError} into a {@link SkipException} (so the block's classes are SKIPPED, not FAILED)
- * and is a no-op when boot succeeded. Lives in the same package so it can invoke the package-private guard
- * directly, and uses the real {@link ITestContext} TestNG injects into each test (only its IAttributes
- * methods are touched — never the Guice-typed methods, which a hand-rolled proxy would force-resolve).
+ * Phase 4.1 verification (Type-A, no Docker): proves the {@link BaseBlockRunner} guard rethrows a
+ * recorded {@code bootError} as a hard failure (so the block's classes are FAILED, not SKIPPED, keeping
+ * the build red) and is a no-op when boot succeeded. Lives in the same package so it can invoke the
+ * package-private guard directly, and uses the real {@link ITestContext} TestNG injects into each test
+ * (only its IAttributes methods are touched — never the Guice-typed methods, which a hand-rolled proxy
+ * would force-resolve).
  */
 public class BaseBlockRunnerVerificationTest {
 
@@ -39,16 +39,16 @@ public class BaseBlockRunnerVerificationTest {
     }
 
     @Test
-    public void guardSkipsWithBootErrorAsCauseWhenBootFailed(ITestContext context) {
+    public void guardFailsWithBootErrorAsCauseWhenBootFailed(ITestContext context) {
         BaseBlockRunner runner = new Probe();
         RuntimeException bootError = new RuntimeException("simulated APIM boot/readiness failure");
         context.setAttribute(BaseBlockRunner.BOOT_ERROR_ATTRIBUTE, bootError);
         try {
-            SkipException skip = Assert.expectThrows(SkipException.class,
+            IllegalStateException failure = Assert.expectThrows(IllegalStateException.class,
                     () -> runner.abortIfBlockBootFailed(context));
-            Assert.assertSame(skip.getCause(), bootError,
-                    "skip cause must be the recorded boot error (single root cause, no NPE cascade)");
-            logger.info("Guard converted a recorded bootError into a SkipException with the boot error "
+            Assert.assertSame(failure.getCause(), bootError,
+                    "failure cause must be the recorded boot error (single root cause, no NPE cascade)");
+            logger.info("Guard rethrew a recorded bootError as a hard failure with the boot error "
                     + "as its cause");
         } finally {
             context.removeAttribute(BaseBlockRunner.BOOT_ERROR_ATTRIBUTE);

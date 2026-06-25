@@ -5,8 +5,10 @@
   (parallel="false"). Phase4.10-DoubleStop boots a real container, the probe records its observation then
   stops the container itself, so BlockLifecycleListener.onFinish's later stop() is a double-stop that must
   no-op. Phase4.10-NoContainer points tomlOverlayPath at a nonexistent file so boot produces no container;
-  onFinish must hit its null-guard and no-op (nothing to stop, nothing to leak). Both share the docker
-  label block=fv-4.10 (distinct <test> names). Wired to no legacy runners.
+  its class FAILS (the guard rethrows the bootError as an IllegalStateException @BeforeClass config FAILURE,
+  turning the build RED), yet onFinish must still hit its null-guard and no-op (nothing to stop, nothing to
+  leak, no NPE). Both share the docker label block=fv-4.10 (distinct <test> names). Wired to no legacy
+  runners.
 -->
 <suite name="Framework Verification 4.10" parallel="false">
     <listeners>

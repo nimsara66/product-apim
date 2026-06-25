@@ -3,14 +3,15 @@
 # Phase 4.9 verification — boot-failure isolation across parallel blocks.
 #
 # The suite runs three blocks parallel="tests" thread-count="2". Phase4.9-BlockBad points tomlOverlayPath
-# at a nonexistent file so its boot fails and its class is SKIPPED; Phase4.9-BlockGoodA/-BlockGoodB boot
-# real containers and pass. A bad boot must NOT fail/skip the good siblings or abort the suite.
+# at a nonexistent file so its boot fails and its class FAILS (build red); Phase4.9-BlockGoodA/-BlockGoodB
+# boot real containers and pass. A bad boot must NOT fail the good siblings or abort the suite.
 #
-# Asserts, after the run: Maven build SUCCEEDS (a skip is not a failure, and the good blocks pass);
-# testng-results shows failed=0, passed>=2 (both good blocks), skipped>=1 (the bad block); the skip carries
-# the boot cause ("APIM block boot failed" + NoSuchFileException) and there is no NPE cascade; exactly two
-# observations across two distinct real container ids (only the good blocks ran probes); and no container
-# with the block label leaked. Re-runnable / idempotent. Prints a single PASS/FAIL line, non-zero on fail.
+# Asserts, after the run: Maven build FAILS (the bad block reddens the build, but the good blocks still
+# pass in isolation); the bad block's abortIfBlockBootFailed is recorded as a @BeforeClass config FAILURE
+# (CONFIG_FAILS>=1), while passed>=2 (both good blocks' @Test methods); the failure carries the boot cause
+# ("APIM block boot failed" + NoSuchFileException) and there is no NPE cascade; exactly two observations
+# across two distinct real container ids (only the good blocks ran probes); and no container with the block
+# label leaked. Re-runnable / idempotent. Prints a single PASS/FAIL line, non-zero on fail.
 #
 # Usage:  ./verify-4.9.sh
 set -euo pipefail
@@ -46,28 +47,34 @@ echo "== Phase ${STEP} verification: boot-failure isolation across parallel bloc
 rm -f "${OBS_FILE}" "${RESULTS_XML}" "${MVN_LOG}"
 cleanup_containers
 
-# A bad boot must SKIP, not abort: the suite (with two healthy blocks) must still succeed.
+# A bad boot must FAIL the build (regression guard against silent skip-to-green) WITHOUT taking its healthy
+# siblings down: Maven must exit non-zero. We run inside `if` so set -e does not abort on the expected
+# failure; the redirect to the log is preserved for diagnostics.
 echo "Running verification suite via Maven..."
-if ! ( cd "${REACTOR_DIR}" && mvn -q -pl tests-integration/cucumber-tests -am \
+if ( cd "${REACTOR_DIR}" && mvn -q -pl tests-integration/cucumber-tests -am \
         -Dsurefire.suite.xml=testng-fv-4.9.xml test ) > "${MVN_LOG}" 2>&1; then
     tail -25 "${MVN_LOG}"
-    fail "Maven build failed - a bad boot leaked as FAILED/ERROR or took its siblings down"
+    fail "Maven build SUCCEEDED - the bad block must FAIL the build, not skip-to-green"
 fi
 
-# Assertion 1: results show the good blocks passed, the bad block skipped, nothing failed.
+# Assertion 1: the bad block's guard rethrew the bootError as a @BeforeClass config FAILURE, while the two
+# good blocks still passed in isolation. (TestNG marks the bad class's @Test methods SKIPPED, but the failed
+# config method is what reddens the build, so we assert on the config-method FAIL plus the good blocks'
+# passed @Test methods - not the root 'failed' attribute, which counts only @Test methods and stays 0.)
 [ -f "${RESULTS_XML}" ] || fail "expected testng results not produced: ${RESULTS_XML}"
 ROOT_ATTRS="$(grep -o '<testng-results[^>]*>' "${RESULTS_XML}" | head -1)"
 get_attr() { printf '%s' "${ROOT_ATTRS}" | sed -n "s/.* $1=\"\([0-9]*\)\".*/\1/p"; }
-SKIPPED="$(get_attr skipped)"; FAILED="$(get_attr failed)"; PASSED="$(get_attr passed)"
-[ "${FAILED:-x}" = "0" ] || fail "expected 0 failed, got '${FAILED}' (a block leaked as FAILED): ${ROOT_ATTRS}"
+PASSED="$(get_attr passed)"
+CONFIG_FAILS="$(grep 'abortIfBlockBootFailed' "${RESULTS_XML}" | grep -c 'status="FAIL"' || true)"
+[ "${CONFIG_FAILS}" -ge 1 ] \
+    || fail "expected >=1 abortIfBlockBootFailed config FAILURE (the bad block), got ${CONFIG_FAILS}"
 [ "${PASSED:-0}" -ge 2 ] || fail "expected >=2 passed (both good blocks), got '${PASSED}': ${ROOT_ATTRS}"
-[ "${SKIPPED:-0}" -ge 1 ] || fail "expected >=1 skipped (the bad block), got '${SKIPPED}': ${ROOT_ATTRS}"
 
-# Assertion 2: the skip is diagnosable - carries the guard message and the real boot cause.
+# Assertion 2: the failure is diagnosable - carries the guard message and the real boot cause.
 grep -q "APIM block boot failed" "${RESULTS_XML}" \
-    || fail "skip reason missing the 'APIM block boot failed' guard message (blank skip?)"
+    || fail "failure reason missing the 'APIM block boot failed' guard message (blank failure?)"
 grep -q "NoSuchFileException" "${RESULTS_XML}" \
-    || fail "skip reason missing the boot root cause (NoSuchFileException) from the bad toml overlay"
+    || fail "failure reason missing the boot root cause (NoSuchFileException) from the bad toml overlay"
 
 # Assertion 3: no NPE cascade from the absent container in the bad block.
 if grep -q "NullPointerException" "${RESULTS_XML}"; then
@@ -91,4 +98,4 @@ fi
 LEFTOVER="$(docker ps -aq --filter "${LABEL_FILTER}" 2>/dev/null || true)"
 [ -z "${LEFTOVER}" ] || fail "containers leaked after run: ${LEFTOVER}"
 
-echo "VERIFY ${STEP}: PASS - bad block SKIPPED in isolation (${SKIPPED} skipped), ${PASSED} good blocks passed, ${EXPECTED_OBS} containers / 2 ids, no NPE, no leaks"
+echo "VERIFY ${STEP}: PASS - bad block FAILED (build red) in isolation (${CONFIG_FAILS} config FAILUREs), ${PASSED} good blocks still passed, ${EXPECTED_OBS} containers / 2 ids, no NPE, no leaks"

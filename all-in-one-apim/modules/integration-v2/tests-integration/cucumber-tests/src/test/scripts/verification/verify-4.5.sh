@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 #
-# Phase 4.5 verification — skip-on-failure for the parallel-on-shared-container model.
+# Phase 4.5 verification — fail-on-boot-failure for the parallel-on-shared-container model.
 #
 # The block's tomlOverlayPath <parameter> points at a nonexistent file, so BlockLifecycleListener.onStart
 # fails reading the overlay, records the cause as the bootError attribute (without throwing), and
-# BaseBlockRunner's guard converts that into a per-class SkipException. Both probe classes must therefore
-# be reported SKIPPED (not FAILED), with the boot exception as the single root cause and no NPE cascade;
-# onFinish must no-op (no container was ever created -> nothing to stop, nothing to leak).
+# BaseBlockRunner's guard rethrows that as a @BeforeClass configuration FAILURE per class. A boot failure
+# must turn the build RED - never a silent skip-to-green - while still avoiding an NPE cascade from the
+# absent container; onFinish must no-op (no container was ever created -> nothing to stop, nothing to leak).
 #
-# Asserts, after the run: Maven build SUCCEEDS (skips are not failures); testng-results shows
-# skipped>=2, failed=0, passed=0; the skip carries the boot cause (NoSuchFileException + the
-# "APIM block boot failed" message) so it is diagnosable; there is NO NullPointerException; the probe
-# observation file was NOT produced (no step ran); and no containers leaked. Re-runnable / idempotent.
-# Prints a single PASS/FAIL line and exits non-zero on failure.
+# Asserts, after the run: Maven build FAILS (a boot failure is not a skip); the guard's
+# abortIfBlockBootFailed config method is recorded FAILED once per probe class (TestNG marks the @Test
+# methods SKIPPED, but the failed config method is what reddens the build); the failure carries the boot
+# cause (NoSuchFileException + the "APIM block boot failed" message) so it is diagnosable; there is NO
+# NullPointerException; the probe observation file was NOT produced (no step ran); and no containers
+# leaked. Re-runnable / idempotent. Prints a single PASS/FAIL line and exits non-zero on failure.
 #
 # Usage:  ./verify-4.5.sh
 set -euo pipefail
@@ -42,31 +43,31 @@ cleanup_containers() {
 # Always clean up on exit so a crashed run never poisons the next.
 trap cleanup_containers EXIT
 
-echo "== Phase ${STEP} verification: skip-on-failure =="
+echo "== Phase ${STEP} verification: fail-on-boot-failure =="
 rm -f "${OBS_FILE}" "${RESULTS_XML}"
 cleanup_containers
 
-# A boot failure must SKIP, not FAIL: Maven must therefore succeed (skips don't fail the build).
+# A boot failure must FAIL the build (regression guard against silent skip-to-green): Maven must exit
+# non-zero. We run inside `if` so set -e does not abort the script on the expected failure.
 echo "Running verification suite via Maven..."
-if ! ( cd "${REACTOR_DIR}" && mvn -q -pl tests-integration/cucumber-tests -am \
+if ( cd "${REACTOR_DIR}" && mvn -q -pl tests-integration/cucumber-tests -am \
         -Dsurefire.suite.xml=testng-fv-4.5.xml test ); then
-    fail "Maven build failed - a boot failure was reported as FAILED/ERROR instead of SKIPPED"
+    fail "Maven build SUCCEEDED - a boot failure must FAIL the build, not skip-to-green"
 fi
 
-# Assertion 1: results show only skips (no failures, no passes).
+# Assertion 1: the guard rethrew the bootError as a @BeforeClass config FAILURE once per probe class.
+# (TestNG marks the class's @Test methods SKIPPED, but the failed config method is what reddens the build,
+# so we assert on the config-method FAIL - not the root 'failed' attribute, which counts only @Test methods.)
 [ -f "${RESULTS_XML}" ] || fail "expected testng results not produced: ${RESULTS_XML}"
-ROOT_ATTRS="$(grep -o '<testng-results[^>]*>' "${RESULTS_XML}" | head -1)"
-get_attr() { printf '%s' "${ROOT_ATTRS}" | sed -n "s/.* $1=\"\([0-9]*\)\".*/\1/p"; }
-SKIPPED="$(get_attr skipped)"; FAILED="$(get_attr failed)"; PASSED="$(get_attr passed)"
-[ "${FAILED:-x}" = "0" ] || fail "expected 0 failed, got '${FAILED}' (boot failure leaked as FAILED): ${ROOT_ATTRS}"
-[ "${PASSED:-x}" = "0" ] || fail "expected 0 passed, got '${PASSED}' (a probe ran despite boot failure): ${ROOT_ATTRS}"
-[ "${SKIPPED:-0}" -ge 2 ] || fail "expected >=2 skipped (one per probe class), got '${SKIPPED}': ${ROOT_ATTRS}"
+CONFIG_FAILS="$(grep 'abortIfBlockBootFailed' "${RESULTS_XML}" | grep -c 'status="FAIL"' || true)"
+[ "${CONFIG_FAILS}" -ge 2 ] \
+    || fail "expected >=2 abortIfBlockBootFailed config FAILUREs (one per probe class), got ${CONFIG_FAILS}"
 
-# Assertion 2: the skip is diagnosable - carries the guard message and the real boot cause as root.
+# Assertion 2: the failure is diagnosable - carries the guard message and the real boot cause as root.
 grep -q "APIM block boot failed" "${RESULTS_XML}" \
-    || fail "skip reason missing the 'APIM block boot failed' guard message (blank skip?)"
+    || fail "failure reason missing the 'APIM block boot failed' guard message (blank failure?)"
 grep -q "NoSuchFileException" "${RESULTS_XML}" \
-    || fail "skip reason missing the boot root cause (NoSuchFileException) from the bad toml overlay"
+    || fail "failure reason missing the boot root cause (NoSuchFileException) from the bad toml overlay"
 
 # Assertion 3: no NPE cascade from the absent container.
 if grep -q "NullPointerException" "${RESULTS_XML}"; then
@@ -74,10 +75,10 @@ if grep -q "NullPointerException" "${RESULTS_XML}"; then
 fi
 
 # Assertion 4: onFinish no-op - no probe step ran, so no observation file was produced.
-[ ! -s "${OBS_FILE}" ] || fail "observation file was produced - a probe step ran despite the skip"
+[ ! -s "${OBS_FILE}" ] || fail "observation file was produced - a probe step ran despite the boot failure"
 
 # Assertion 5: nothing leaked - no container was ever created for this block.
 LEFTOVER="$(docker ps -aq --filter "${LABEL_FILTER}" 2>/dev/null || true)"
 [ -z "${LEFTOVER}" ] || fail "containers leaked after run: ${LEFTOVER}"
 
-echo "VERIFY ${STEP}: PASS - boot failure SKIPPED ${SKIPPED} classes (0 failed/0 passed), boot cause preserved as root, no NPE cascade, onFinish no-op, no leaks"
+echo "VERIFY ${STEP}: PASS - boot failure FAILED the build via ${CONFIG_FAILS} config FAILUREs (no silent skip), boot cause preserved as root, no NPE cascade, onFinish no-op, no leaks"

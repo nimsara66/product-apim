@@ -268,6 +268,34 @@ gh run watch
 
 ---
 
+### T6 — Build the dist + images once, share across matrix entries
+
+**Goal:** when `integration-v2` grows beyond one matrix entry, stop per-entry rebuilding. Each matrix
+entry is a separate job on a fresh runner (own filesystem + own Docker daemon), so as written every
+entry re-runs both the ~15-min dist build and the image builds. Build once, fan out.
+
+**Approach:** split into a prerequisite `v2-build-images` job + the `integration-v2` matrix job:
+- `v2-build-images`: `mvn clean install -f all-in-one-apim/pom.xml -Dmaven.test.skip=true ...` (dist),
+  then `mvn install -pl tests-integration/cucumber-tests -am -DskipTests` (builds images, runs no
+  suite), then `docker save wso2am:4.7.0-SNAPSHOT-jdk21 node-app-server:latest | gzip` → upload-artifact.
+- `integration-v2` (`needs: v2-build-images`): download-artifact → `docker load` → run the suite with
+  **`mvn test`** (not `install`). Key enabler: the image-build execs bind to `pre-integration-test`,
+  which runs in `install`/`verify` but NOT `test`, so `mvn test` reuses the loaded images and never
+  rebuilds. The framework boots the container from the fixed tag, so a `docker load` is all each entry needs.
+
+**Ship-images mechanism — decide empirically:** `docker save`→artifact→`docker load` (no registry, but
+tarball is large: wso2am ~1.4 GB + node 189 MB, gzipped ~600 MB–1 GB, so per-entry upload/download adds
+minutes) vs push to GHCR + `docker pull` (cleaner past ~4–5 entries, needs registry auth + GHCR image
+tag). The ~15-min build is a generous budget to amortize against, so measure the tarball download cost
+on a real runner before committing — only worth it if download < rebuild.
+
+**Done when:** the dist + image build runs exactly once per workflow run regardless of matrix size, and
+matrix entries consume the prebuilt images (verified by the absence of an image-build step in their logs).
+
+- [ ] T6 complete
+
+---
+
 ## Out of scope (tracked elsewhere)
 
 - Rewriting real integration tests onto `BaseBlockRunner` (added to `testng-v2.xml` one block at a time).

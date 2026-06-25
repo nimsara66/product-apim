@@ -3,10 +3,12 @@
 <!--
   Isolated verification lane (Phase 4.9): boot-failure isolation across parallel blocks. Suite runs
   parallel="tests" thread-count="2" over THREE blocks. Phase4.9-BlockBad points tomlOverlayPath at a
-  nonexistent file, so its boot fails and its class is SKIPPED. Phase4.9-BlockGoodA and -BlockGoodB boot
-  real containers and pass. The bad block's failure must NOT fail/skip the good siblings or abort the
-  suite. All three share the docker label block=fv-4.9 (distinct <test> names => distinct shared scopes);
-  the bad block creates no container. Wired to no legacy runners, so it cannot affect the legacy run.
+  nonexistent file, so its boot fails and its class FAILS (the guard rethrows the bootError as an
+  IllegalStateException @BeforeClass config FAILURE, turning the build RED). Phase4.9-BlockGoodA and
+  -BlockGoodB boot real containers and pass. The bad block's failure must NOT fail the good siblings or
+  abort the suite - they still pass in isolation. All three share the docker label block=fv-4.9 (distinct
+  <test> names => distinct shared scopes); the bad block creates no container. Wired to no legacy runners,
+  so it cannot affect the legacy run.
 -->
 <suite name="Framework Verification 4.9" parallel="tests" thread-count="2">
     <listeners>

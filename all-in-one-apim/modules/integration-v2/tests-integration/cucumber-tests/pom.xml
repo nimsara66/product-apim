@@ -109,6 +109,19 @@
             <version>${commons.io.version}</version>
             <scope>test</scope>
         </dependency>
+        <!--
+            SLF4J->log4j 1.x binding for the test JVM. Without a binding, Testcontainers' Slf4jLogConsumer
+            (which carries each booted APIM container's stdout/stderr) routes to SLF4J NOP and the server's
+            startup log is silently dropped - leaving CI blind on boot failures. Pinned to slf4j.api.version
+            (not the managed org.slf4j.version) so the binding matches the slf4j-api already on the classpath
+            and SLF4J does not emit a version-mismatch warning.
+        -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+            <version>${slf4j.api.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <build>
         <plugins>
