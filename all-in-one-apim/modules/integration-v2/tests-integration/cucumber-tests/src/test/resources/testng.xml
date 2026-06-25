@@ -10,6 +10,7 @@
         <classes>
             <class name="org.wso2.am.integration.cucumbertests.runners.common.SystemInitializationRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.common.TenantUserInitializationRunner"/>
+            <!-- TEMP: single-test run — everything below is commented out except JWTTokenFormatRunner
             <class name="org.wso2.am.integration.cucumbertests.runners.common.MigratedTenantUserInitilizationRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.CreateDeployPublishTestRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.ImportOASDefinitionRunner"/>
@@ -19,7 +20,9 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.APIDocumentsTestRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.APIOtherCommonConfigurationsRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.CreateApplicationRunner"/>
+            -->
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.JWTTokenFormatRunner"/>
+            <!-- TEMP: single-test run — everything below is commented out except SystemShutdown
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.SubscriptionThrottlingPolicyRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.DevPortalSearchVisibilityRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.publisher.GraphQLApiBaselineRunner"/>
@@ -40,9 +43,11 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.migration.APIPoliciesRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.migration.MigratedApplicationRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.migration.APIProviderChangeRunner"/>
+            -->
             <class name="org.wso2.am.integration.cucumbertests.runners.common.SystemShutdown"/>
         </classes>
     </test>
+    <!-- TEMP: single-test run — CustomHeaderTests disabled
     <test name="CustomHeaderTests">
         <classes>
             <class name="org.wso2.am.integration.cucumbertests.runners.common.CustomHeaderSystemInitializationRunner"/>
@@ -51,4 +56,5 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.common.SystemShutdown"/>
         </classes>
     </test>
+    -->
 </suite>

@@ -187,7 +187,7 @@
                 <surefire.shared.database.validationQuery>SELECT 1</surefire.shared.database.validationQuery>
                 <surefire.apim.database.type>h2</surefire.apim.database.type>
                 <surefire.apim.database.driver>org.h2.Driver</surefire.apim.database.driver>
-                <surefire.apim.database.url>jdbc:h2:./repository/database/WSO2AM_APIMGT_DB;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=60000</surefire.apim.database.url>
+                <surefire.apim.database.url>jdbc:h2:./repository/database/WSO2AM_DB;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=60000</surefire.apim.database.url>
                 <surefire.apim.database.username>wso2carbon</surefire.apim.database.username>
                 <surefire.apim.database.password>wso2carbon</surefire.apim.database.password>
                 <surefire.apim.database.validationQuery>SELECT 1</surefire.apim.database.validationQuery>
