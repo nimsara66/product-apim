@@ -17,8 +17,8 @@
 
 package org.wso2.am.integration.cucumbertests.verification;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.testng.Assert;
 import org.testng.TestNG;
 import org.testng.annotations.Test;
@@ -46,7 +46,7 @@ import java.util.Map;
  */
 public class BlockScopeIsolationVerificationTest {
 
-    private static final Logger logger = LoggerFactory.getLogger(BlockScopeIsolationVerificationTest.class);
+    private static final Log logger = LogFactory.getLog(BlockScopeIsolationVerificationTest.class);
 
     private static final String BLOCK_NAME = "SharedBlock";
     private static final String SUITE_A = "FV-2.1-SuiteA";
@@ -80,8 +80,8 @@ public class BlockScopeIsolationVerificationTest {
                 "block in " + SUITE_A + " did not read its own sentinel (got " + readA + ")");
         Assert.assertEquals(readB, "B",
                 "block in " + SUITE_B + " did not read its own sentinel (got " + readB + ")");
-        logger.info("Positive: same-named blocks across suites isolated — {}='{}', {}='{}'",
-                scopeA, readA, scopeB, readB);
+        logger.info("Positive: same-named blocks across suites isolated — " + scopeA + "='" + readA
+                + "', " + scopeB + "='" + readB + "'");
 
         // --- Negative: legacy bare-testName key collides for the same two blocks ---
         String legacyKey = BLOCK_NAME;
@@ -95,8 +95,8 @@ public class BlockScopeIsolationVerificationTest {
                 "expected bare-testName keying to collide (last writer wins), but got " + collided);
         Assert.assertNotEquals(collided, "A",
                 "bare-testName keying unexpectedly preserved the first block's value");
-        logger.info("Negative: bare-testName key '{}' collided as expected — first block's value lost",
-                legacyKey);
+        logger.info("Negative: bare-testName key '" + legacyKey + "' collided as expected — first "
+                + "block's value lost");
 
         // Clean up scopes/maps this test created so it leaves no static residue.
         TestContext.setScope(scopeA, scopeA);

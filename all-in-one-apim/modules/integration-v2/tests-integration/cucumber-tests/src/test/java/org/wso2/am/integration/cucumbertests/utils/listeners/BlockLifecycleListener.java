@@ -17,9 +17,9 @@
 
 package org.wso2.am.integration.cucumbertests.utils.listeners;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.jaxen.JaxenException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.testng.ITestContext;
 import org.testng.ITestListener;
 import org.testng.xml.XmlTest;
@@ -48,7 +48,7 @@ import java.nio.file.Paths;
  */
 public class BlockLifecycleListener implements ITestListener {
 
-    private static final Logger logger = LoggerFactory.getLogger(BlockLifecycleListener.class);
+    private static final Log logger = LogFactory.getLog(BlockLifecycleListener.class);
 
     /** Must match {@code BaseBlockRunner.BOOT_ERROR_ATTRIBUTE}. */
     static final String BOOT_ERROR_ATTRIBUTE = "bootError";
@@ -96,15 +96,15 @@ public class BlockLifecycleListener implements ITestListener {
             TestContext.setShared(CONTAINER_KEY, container);
             TestContext.setShared(BASE_URL_KEY, baseUrl);
             TestContext.setShared(BASE_GATEWAY_URL_KEY, gatewayUrl);
-            logger.info("Block '{}' booted and ready: baseUrl={} baseGatewayUrl={}",
-                    label, baseUrl, gatewayUrl);
+            logger.info("Block '" + label + "' booted and ready: baseUrl=" + baseUrl
+                    + " baseGatewayUrl=" + gatewayUrl);
 
             if (Boolean.parseBoolean(param(context, PARAM_INIT_TENANT_USERS))) {
                 provisionTenantUsers(label, param(context, PARAM_TENANT_SET));
             }
         } catch (Throwable t) {
             context.setAttribute(BOOT_ERROR_ATTRIBUTE, t);
-            logger.error("Block '{}' boot/readiness failed; its classes will be skipped", label, t);
+            logger.error("Block '" + label + "' boot/readiness failed; its classes will be skipped", t);
         }
     }
 
@@ -123,8 +123,8 @@ public class BlockLifecycleListener implements ITestListener {
             Object stored = TestContext.get(CONTAINER_KEY);
             if (stored instanceof DynamicApimContainer container) {
                 container.stop();
-                logger.info("Block '{}' container stopped; dynamic host ports released by Docker",
-                        context.getName());
+                logger.info("Block '" + context.getName()
+                        + "' container stopped; dynamic host ports released by Docker");
             }
         } finally {
             TestContext.clear();
@@ -159,8 +159,8 @@ public class BlockLifecycleListener implements ITestListener {
                     "testUser1", "testUser1", roles);
             TenantUserProvisioner.addUser("tenant1.com", "userKey1", "testUser11", "testUser11", roles);
         }
-        logger.info("Block '{}' provisioned tenant set '{}'", label,
-                tenantSet == null || tenantSet.isBlank() ? "default" : tenantSet);
+        logger.info("Block '" + label + "' provisioned tenant set '"
+                + (tenantSet == null || tenantSet.isBlank() ? "default" : tenantSet) + "'");
     }
 
     private String resolveTomlContent(ITestContext context) throws java.io.IOException {

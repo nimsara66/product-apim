@@ -18,8 +18,8 @@
 package org.wso2.am.integration.cucumbertests.verification;
 
 import com.sun.net.httpserver.HttpServer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testng.Assert;
@@ -50,7 +50,7 @@ import java.nio.charset.StandardCharsets;
  */
 public class PartialBootReadinessVerificationTest {
 
-    private static final Logger logger = LoggerFactory.getLogger(PartialBootReadinessVerificationTest.class);
+    private static final Log logger = LogFactory.getLog(PartialBootReadinessVerificationTest.class);
 
     private static final String STUB_IMAGE =
             System.getProperty("node.docker.image.name", "node-app-server:latest");
@@ -82,7 +82,8 @@ public class PartialBootReadinessVerificationTest {
             // The readiness gate must still reject it, because the health-check path never returns 200.
             Assert.assertFalse(ServerReadiness.awaitReady(baseUrl, PROBE_TIMEOUT_MILLIS),
                     "readiness gate falsely reported ready for a listening-but-non-200 (partial boot) server");
-            logger.info("Phase 4.13 negative control passed: partial boot at {} correctly rejected", baseUrl);
+            logger.info("Phase 4.13 negative control passed: partial boot at " + baseUrl
+                    + " correctly rejected");
         }
 
         // Positive control: same gate, but now the health-check path returns 200.
@@ -98,7 +99,8 @@ public class PartialBootReadinessVerificationTest {
             String baseUrl = "http://127.0.0.1:" + ready.getAddress().getPort() + "/";
             Assert.assertTrue(ServerReadiness.awaitReady(baseUrl, PROBE_TIMEOUT_MILLIS),
                     "readiness gate rejected a server that serves 200 on the health-check path");
-            logger.info("Phase 4.13 positive control passed: 200-serving server at {} accepted", baseUrl);
+            logger.info("Phase 4.13 positive control passed: 200-serving server at " + baseUrl
+                    + " accepted");
         } finally {
             ready.stop(0);
         }

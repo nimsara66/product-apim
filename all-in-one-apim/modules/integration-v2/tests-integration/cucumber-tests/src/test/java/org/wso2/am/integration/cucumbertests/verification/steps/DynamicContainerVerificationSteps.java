@@ -19,8 +19,8 @@ package org.wso2.am.integration.cucumbertests.verification.steps;
 
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.am.integration.cucumbertests.utils.ModulePathResolver;
 import org.wso2.am.integration.cucumbertests.utils.TestContext;
 import org.wso2.am.integration.test.utils.Constants;
@@ -40,7 +40,7 @@ import java.nio.file.Paths;
  */
 public class DynamicContainerVerificationSteps {
 
-    private static final Logger logger = LoggerFactory.getLogger(DynamicContainerVerificationSteps.class);
+    private static final Log logger = LogFactory.getLog(DynamicContainerVerificationSteps.class);
     private static final String CONTAINER_KEY = "dynamicApimContainer";
     private static final String VERIFY_LABEL_KEY = "verify-step";
     private static final String VERIFY_LABEL_VALUE = "1.3";
@@ -62,8 +62,8 @@ public class DynamicContainerVerificationSteps {
         TestContext.setShared("baseGatewayUrl", container.getGatewayHttpsUrl());
         TestContext.setShared("label", label);
 
-        logger.info("Dynamic APIM container '{}' started: baseUrl={} baseGatewayUrl={}",
-                label, container.getServletHttpsUrl(), container.getGatewayHttpsUrl());
+        logger.info("Dynamic APIM container '" + label + "' started: baseUrl="
+                + container.getServletHttpsUrl() + " baseGatewayUrl=" + container.getGatewayHttpsUrl());
     }
 
     @Then("I stop the dynamic API Manager container")
@@ -77,6 +77,6 @@ public class DynamicContainerVerificationSteps {
         String hostPort = container.getHost() + ":" + container.getMappedPort(Constants.HTTPS_PORT);
         Files.writeString(Paths.get(callerModuleDir, "target", "verify-1.3-servlet-https-port.txt"), hostPort);
         container.stop();
-        logger.info("Dynamic APIM container stopped (servlet-https was {})", hostPort);
+        logger.info("Dynamic APIM container stopped (servlet-https was " + hostPort + ")");
     }
 }

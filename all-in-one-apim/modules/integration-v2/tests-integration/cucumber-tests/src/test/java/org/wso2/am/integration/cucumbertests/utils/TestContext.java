@@ -17,18 +17,15 @@
 
 package org.wso2.am.integration.cucumbertests.utils;
 
-import java.util.HashMap;
 import org.testng.ITestContext;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class TestContext {
 
-    // ThreadLocal to maintain a separate contextMap per thread
-    private static final ThreadLocal<Map<String, Object>> threadLocalContext =
-            ThreadLocal.withInitial(HashMap::new);
     private static final String DEFAULT_SHARED_SCOPE = "global-shared";
     private static final String DEFAULT_LOCAL_SCOPE = "global-local";
 
@@ -82,22 +79,75 @@ public class TestContext {
     }
 
     public static void set(String key, Object value) {
-        threadLocalContext.get().put(key, value);
+        getCurrentLocalContext().put(key, value);
+    }
+
+    public static void setShared(String key, Object value) {
+        getCurrentSharedContext().put(key, value);
+    }
+
+    /**
+     * Appends a value to a list stored under the given key, creating the list if absent.
+     * Used to register created resources (e.g. API/application ids) for scenario teardown.
+     */
+    @SuppressWarnings("unchecked")
+    public static void addToList(String key, Object value) {
+        ((List<Object>) getCurrentLocalContext().computeIfAbsent(key, k -> new ArrayList<>())).add(value);
+    }
+
+    /**
+     * Returns the list stored under the given key, or an empty list if absent.
+     */
+    @SuppressWarnings("unchecked")
+    public static List<Object> getList(String key) {
+        Object value = get(key);
+        return value instanceof List ? (List<Object>) value : new ArrayList<>();
     }
 
     public static Object get(String key) {
-        return threadLocalContext.get().get(key);
+        Map<String, Object> localContext = getCurrentLocalContext();
+        if (localContext.containsKey(key)) {
+            return localContext.get(key);
+        }
+        return getCurrentSharedContext().get(key);
     }
 
     public static boolean contains(String key) {
-        return threadLocalContext.get().containsKey(key);
+        return getCurrentLocalContext().containsKey(key) || getCurrentSharedContext().containsKey(key);
     }
 
     public  static void remove(String key) {
-        threadLocalContext.get().remove(key);
+        getCurrentLocalContext().remove(key);
+    }
+
+    public static void removeShared(String key) {
+        getCurrentSharedContext().remove(key);
     }
 
     public static void clear() {
-        threadLocalContext.get().clear();
+        ContextScope scope = getScope();
+        localContexts.remove(scope.localScopeId);
+        sharedContexts.remove(scope.sharedScopeId);
+    }
+
+    private static ContextScope getScope() {
+        ContextScope scope = currentScope.get();
+        if (scope == null) {
+            scope = new ContextScope(DEFAULT_SHARED_SCOPE, DEFAULT_LOCAL_SCOPE);
+            currentScope.set(scope);
+        }
+        return scope;
+    }
+
+    private static Map<String, Object> getCurrentLocalContext() {
+        return localContexts.computeIfAbsent(getScope().localScopeId, key -> new ConcurrentHashMap<>());
+    }
+
+    private static Map<String, Object> getCurrentSharedContext() {
+        return sharedContexts.computeIfAbsent(getScope().sharedScopeId, key -> new ConcurrentHashMap<>());
+    }
+
+    private static String defaultIfBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 }

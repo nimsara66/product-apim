@@ -52,13 +52,16 @@ public class BaseSteps {
 
     private static final Log log = LogFactory.getLog(BaseSteps.class);
 
-    private final String baseUrl;
     private Tenant tenant;
     private User currentuser;
 
-    public BaseSteps() {
+    protected String getBaseUrl() {
 
-        baseUrl = TestContext.get(Constants.BASE_URL).toString();
+        Object baseUrlObj = TestContext.get("baseUrl");
+        if (baseUrlObj == null) {
+            throw new IllegalStateException("baseUrl is not available in the test context yet");
+        }
+        return baseUrlObj.toString();
     }
 
     /**
@@ -92,7 +95,7 @@ public class BaseSteps {
         Map<String, String> headers = new HashMap<>();
         headers.put("Authorization", "Basic " + encodedCredentials);
 
-        HttpResponse dcrResponse = SimpleHTTPClient.getInstance().doPost(Utils.getDCREndpointURL(baseUrl), headers, json.toString(),
+        HttpResponse dcrResponse = SimpleHTTPClient.getInstance().doPost(Utils.getDCREndpointURL(getBaseUrl()), headers, json.toString(),
                 Constants.CONTENT_TYPES.APPLICATION_JSON);
         Assert.assertEquals(dcrResponse.getResponseCode(), 200, dcrResponse.getData());
 
@@ -121,7 +124,7 @@ public class BaseSteps {
         json.addProperty("password", currentuser.getPassword());
         json.addProperty("scope", "apim:api_view apim:api_create apim:api_publish apim:api_delete apim:api_manage apim:api_import_export apim:subscription_manage apim:client_certificates_add apim:client_certificates_update apim:shared_scope_manage apim:common_operation_policy_manage apim:api_generate_key apim:gateway_policy_manage");
 
-        HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getAPIMTokenEndpointURL(baseUrl), headers,
+        HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getAPIMTokenEndpointURL(getBaseUrl()), headers,
             json.toString(), Constants.CONTENT_TYPES.APPLICATION_JSON);
         Assert.assertEquals(response.getResponseCode(), 200, response.getData());
 
@@ -148,7 +151,7 @@ public class BaseSteps {
         json.addProperty("password", currentuser.getPassword());
         json.addProperty("scope", "apim:app_manage apim:sub_manage apim:subscribe");
 
-        HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getAPIMTokenEndpointURL(baseUrl), headers,
+        HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getAPIMTokenEndpointURL(getBaseUrl()), headers,
             json.toString(), Constants.CONTENT_TYPES.APPLICATION_JSON);
         Assert.assertEquals(response.getResponseCode(), 200, response.getData());
 
@@ -174,7 +177,7 @@ public class BaseSteps {
         json.addProperty("password", currentuser.getPassword());
         json.addProperty("scope", "apim:admin apim:tier_view apim:api_provider_change");
 
-        HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getAPIMTokenEndpointURL(baseUrl), headers,
+        HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getAPIMTokenEndpointURL(getBaseUrl()), headers,
                 json.toString(), Constants.CONTENT_TYPES.APPLICATION_JSON);
         Assert.assertEquals(response.getResponseCode(), 200, response.getData());
 
@@ -541,7 +544,7 @@ public class BaseSteps {
                     "Bearer " + TestContext.get("publisherAccessToken").toString());
 
             retrievedResponse = SimpleHTTPClient.getInstance().doGet(
-                    Utils.getResourceEndpointURL(baseUrl, resourceType, resourceId), headers);
+                    Utils.getResourceEndpointURL(getBaseUrl(), resourceType, resourceId), headers);
 
             if (retrievedResponse.getResponseCode() == 200) {
                 try {
@@ -669,7 +672,7 @@ public class BaseSteps {
         String apiVersion = Utils.extractValueFromPayload(actualApiDetailsPayload, "version").toString();
         User tenantAdmin = tenant.getTenantAdmin();
 
-        String url = Utils.getAPIArtifactDeployedInGatewayURL(baseUrl, apiName, apiVersion, tenant.getDomain());
+        String url = Utils.getAPIArtifactDeployedInGatewayURL(getBaseUrl(), apiName, apiVersion, tenant.getDomain());
 
         String encodedCredentials = DatatypeConverter.printBase64Binary(
                 (tenantAdmin.getUserName() + ':' + tenantAdmin.getPassword()).getBytes(StandardCharsets.UTF_8));
@@ -717,7 +720,7 @@ public class BaseSteps {
         String apiVersion = Utils.extractValueFromPayload(actualApiDetailsPayload, "version").toString();
         User tenantAdmin = tenant.getTenantAdmin();
 
-        String url = Utils.getAPIArtifactDeployedInGatewayURL(baseUrl, apiName, apiVersion, tenant.getDomain());
+        String url = Utils.getAPIArtifactDeployedInGatewayURL(getBaseUrl(), apiName, apiVersion, tenant.getDomain());
 
         String encodedCredentials = DatatypeConverter.printBase64Binary(
                 (tenantAdmin.getUserName() + ':' + tenantAdmin.getPassword()).getBytes(StandardCharsets.UTF_8));

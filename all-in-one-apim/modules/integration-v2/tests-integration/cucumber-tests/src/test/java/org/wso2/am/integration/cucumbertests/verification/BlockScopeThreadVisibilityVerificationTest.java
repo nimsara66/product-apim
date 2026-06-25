@@ -17,8 +17,8 @@
 
 package org.wso2.am.integration.cucumbertests.verification;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.testng.Assert;
 import org.testng.TestNG;
 import org.testng.annotations.Test;
@@ -46,8 +46,8 @@ import java.util.Map;
  */
 public class BlockScopeThreadVisibilityVerificationTest {
 
-    private static final Logger logger =
-            LoggerFactory.getLogger(BlockScopeThreadVisibilityVerificationTest.class);
+    private static final Log logger =
+            LogFactory.getLog(BlockScopeThreadVisibilityVerificationTest.class);
 
     private static final String SUITE = "FV-2.2";
     private static final List<String> BLOCKS = List.of("Block-1", "Block-2", "Block-3");
@@ -94,9 +94,9 @@ public class BlockScopeThreadVisibilityVerificationTest {
         Assert.assertTrue(ThreadScopeProbe.failures.isEmpty(),
                 "scope visibility/leak failures detected: " + ThreadScopeProbe.failures);
 
-        logger.info("Phase 2.2: {} invocations across {} parallel blocks on worker threads {} — "
-                        + "all read their own block scope, none saw global POISON or a sibling",
-                ThreadScopeProbe.invocations.get(), BLOCKS.size(), ThreadScopeProbe.threadNames);
+        logger.info("Phase 2.2: " + ThreadScopeProbe.invocations.get() + " invocations across "
+                + BLOCKS.size() + " parallel blocks on worker threads " + ThreadScopeProbe.threadNames
+                + " — all read their own block scope, none saw global POISON or a sibling");
 
         // Clean up the maps this test created so it leaves no static residue.
         TestContext.clearScope();

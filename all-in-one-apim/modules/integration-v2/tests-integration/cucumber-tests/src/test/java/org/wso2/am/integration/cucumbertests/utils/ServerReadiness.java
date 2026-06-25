@@ -17,8 +17,8 @@
 
 package org.wso2.am.integration.cucumbertests.utils;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.am.integration.cucumbertests.utils.clients.SimpleHTTPClient;
 import org.wso2.am.integration.test.utils.Constants;
 import org.wso2.carbon.automation.test.utils.http.client.HttpResponse;
@@ -30,7 +30,7 @@ import org.wso2.carbon.automation.test.utils.http.client.HttpResponse;
  */
 public final class ServerReadiness {
 
-    private static final Logger logger = LoggerFactory.getLogger(ServerReadiness.class);
+    private static final Log logger = LogFactory.getLog(ServerReadiness.class);
 
     private ServerReadiness() {
     }

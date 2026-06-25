@@ -19,8 +19,8 @@ package org.wso2.am.integration.cucumbertests.verification;
 
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.model.Container;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 import org.wso2.am.integration.cucumbertests.utils.ModulePathResolver;
@@ -49,8 +49,8 @@ import java.util.List;
  */
 public class DynamicApimContainerMisuseVerificationTest {
 
-    private static final Logger logger =
-            LoggerFactory.getLogger(DynamicApimContainerMisuseVerificationTest.class);
+    private static final Log logger =
+            LogFactory.getLog(DynamicApimContainerMisuseVerificationTest.class);
     private static final String VERIFY_LABEL_KEY = "verify-step";
     private static final String VERIFY_LABEL_VALUE = "1.4";
 
@@ -64,7 +64,7 @@ public class DynamicApimContainerMisuseVerificationTest {
         } catch (IllegalStateException e) {
             Assert.assertNotNull(e.getMessage(), "fail-fast exception must carry a clear message");
             Assert.assertFalse(e.getMessage().isBlank(), "fail-fast exception message must not be blank");
-            logger.info("getMappedPort before start() failed fast as expected: {}", e.getMessage());
+            logger.info("getMappedPort before start() failed fast as expected: " + e.getMessage());
         }
     }
 
@@ -87,7 +87,8 @@ public class DynamicApimContainerMisuseVerificationTest {
 
             // Abnormal termination: hard kill, bypassing the graceful stop()/Ryuk path.
             docker.killContainerCmd(containerId).exec();
-            logger.info("Hard-killed container {} (host port was {}:{})", containerId, host, hostPort);
+            logger.info("Hard-killed container " + containerId + " (host port was " + host + ":"
+                    + hostPort + ")");
 
             // The host port must be released even on an abnormal exit (no host-port leak).
             Assert.assertTrue(pollUntilPortReleased(host, hostPort),
@@ -100,15 +101,15 @@ public class DynamicApimContainerMisuseVerificationTest {
                     .exec();
             Assert.assertEquals(records.size(), 1,
                     "a hard-killed container should remain as an exited record until explicitly pruned");
-            logger.info("Killed container {} remains as an exited record (state={}) — manual prune required",
-                    containerId, records.get(0).getState());
+            logger.info("Killed container " + containerId + " remains as an exited record (state="
+                    + records.get(0).getState() + ") — manual prune required");
         } finally {
             // Self-clean: remove the killed record so the run leaves no leaks.
             if (docker != null && containerId != null) {
                 try {
                     docker.removeContainerCmd(containerId).withForce(true).exec();
                 } catch (Exception e) {
-                    logger.warn("Error force-removing killed verify-1.4 container {}", containerId, e);
+                    logger.warn("Error force-removing killed verify-1.4 container " + containerId, e);
                 }
             }
         }

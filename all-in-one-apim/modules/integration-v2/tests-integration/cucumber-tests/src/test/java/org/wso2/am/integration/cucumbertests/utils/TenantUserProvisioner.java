@@ -17,9 +17,9 @@
 
 package org.wso2.am.integration.cucumbertests.utils;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.jaxen.JaxenException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.testng.Assert;
 import org.wso2.am.integration.cucumbertests.utils.clients.SimpleHTTPClient;
 import org.wso2.am.integration.test.utils.Constants;
@@ -43,7 +43,7 @@ import java.util.List;
  */
 public final class TenantUserProvisioner {
 
-    private static final Logger logger = LoggerFactory.getLogger(TenantUserProvisioner.class);
+    private static final Log logger = LogFactory.getLog(TenantUserProvisioner.class);
 
     private TenantUserProvisioner() {
     }
@@ -105,7 +105,7 @@ public final class TenantUserProvisioner {
         List<String> existingTenantDomains = retrieveExistingTenantDomains();
 
         if (existingTenantDomains.contains(tenantDomain)) {
-            logger.info("Tenant with domain {} already exists", tenantDomain);
+            logger.info("Tenant with domain " + tenantDomain + " already exists");
         } else {
             String payload = "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" " +
                     "xmlns:ser=\"http://services.mgt.tenant.carbon.wso2.org\" " +
@@ -153,7 +153,7 @@ public final class TenantUserProvisioner {
         List<String> existingTenantUsers = retrieveExistingUsers(tenant);
 
         if (existingTenantUsers.contains(username)) {
-            logger.info("User with username {} already exists in the tenant", username);
+            logger.info("User with username " + username + " already exists in the tenant");
         } else {
             String[] rolesList = roles.split("\\s*,\\s*");
             StringBuilder rolesXml = new StringBuilder();

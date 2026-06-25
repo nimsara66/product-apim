@@ -17,8 +17,8 @@
 
 package org.wso2.am.integration.cucumbertests.utils;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -66,7 +66,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class TestContextConcurrencyStressTest {
 
-    private static final Logger logger = LoggerFactory.getLogger(TestContextConcurrencyStressTest.class);
+    private static final Log logger = LogFactory.getLog(TestContextConcurrencyStressTest.class);
 
     /** Simulated parallel blocks (distinct shared scopes), each contended by several class threads. */
     private static final int SCOPES = 8;
@@ -162,8 +162,9 @@ public class TestContextConcurrencyStressTest {
                 "expected at least " + SCOPES + " retained shared scopes, got " + scopeCount);
 
         writeMarker(expectedWrites, scopeCount);
-        logger.info("C.2 stress: {} threads x {} keys across {} scopes = {} writes, 0 errors, {} shared scopes",
-                totalThreads, KEYS_PER_THREAD, SCOPES, expectedWrites, scopeCount);
+        logger.info("C.2 stress: " + totalThreads + " threads x " + KEYS_PER_THREAD + " keys across "
+                + SCOPES + " scopes = " + expectedWrites + " writes, 0 errors, " + scopeCount
+                + " shared scopes");
     }
 
     private static String sharedId(int scope) {

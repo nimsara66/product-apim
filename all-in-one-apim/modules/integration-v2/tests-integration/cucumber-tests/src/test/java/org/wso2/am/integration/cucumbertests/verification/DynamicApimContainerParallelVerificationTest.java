@@ -17,8 +17,8 @@
 
 package org.wso2.am.integration.cucumbertests.verification;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 import org.wso2.am.integration.cucumbertests.utils.ModulePathResolver;
@@ -51,8 +51,8 @@ import java.util.concurrent.TimeUnit;
  */
 public class DynamicApimContainerParallelVerificationTest {
 
-    private static final Logger logger =
-            LoggerFactory.getLogger(DynamicApimContainerParallelVerificationTest.class);
+    private static final Log logger =
+            LogFactory.getLog(DynamicApimContainerParallelVerificationTest.class);
     private static final String VERIFY_LABEL_KEY = "verify-step";
     private static final String VERIFY_LABEL_VALUE = "1.2";
     private static final int CONTAINER_COUNT = 2;
@@ -134,8 +134,8 @@ public class DynamicApimContainerParallelVerificationTest {
                     "host port " + hostPort + " still accepts connections after stop()");
         }
 
-        logger.info("Phase 1.2 in-JVM assertions passed for {} parallel containers (servlet-https {})",
-                CONTAINER_COUNT, servletHttpsHostPorts);
+        logger.info("Phase 1.2 in-JVM assertions passed for " + CONTAINER_COUNT
+                + " parallel containers (servlet-https " + servletHttpsHostPorts + ")");
     }
 
     private boolean pollUntilHealthy(String url) {

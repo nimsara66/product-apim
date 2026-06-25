@@ -17,8 +17,8 @@
 
 package org.wso2.am.integration.cucumbertests.verification;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 import org.testng.xml.SuiteXmlParser;
@@ -43,7 +43,7 @@ import java.util.List;
  */
 public class BlockUniquenessLintVerificationTest {
 
-    private static final Logger logger = LoggerFactory.getLogger(BlockUniquenessLintVerificationTest.class);
+    private static final Log logger = LogFactory.getLog(BlockUniquenessLintVerificationTest.class);
 
     private static final String LINT_CLASS = BlockUniquenessLintListener.class.getName();
     private static final String PROBE_CLASS = UniquenessProbe.class.getName();
@@ -57,7 +57,7 @@ public class BlockUniquenessLintVerificationTest {
                 () -> new BlockUniquenessLintListener().alter(suites));
         Assert.assertTrue(e.getMessage().contains("duplicate block id"),
                 "unexpected message: " + e.getMessage());
-        logger.info("Duplicate composite across two same-named suites rejected: {}", e.getMessage());
+        logger.info("Duplicate composite across two same-named suites rejected: " + e.getMessage());
     }
 
     @Test
@@ -71,8 +71,8 @@ public class BlockUniquenessLintVerificationTest {
                 () -> new BlockUniquenessLintListener().alter(suites));
         Assert.assertTrue(e.getMessage().contains("duplicate block id"),
                 "unexpected message: " + e.getMessage());
-        logger.info("Duplicate composite across a child suite rejected (recursion works): {}",
-                e.getMessage());
+        logger.info("Duplicate composite across a child suite rejected (recursion works): "
+                + e.getMessage());
     }
 
     @Test
@@ -83,7 +83,7 @@ public class BlockUniquenessLintVerificationTest {
                 () -> new BlockUniquenessLintListener().alter(suites));
         Assert.assertTrue(e.getMessage().contains("no explicit name"),
                 "unexpected message: " + e.getMessage());
-        logger.info("Unnamed/default-named suite rejected: {}", e.getMessage());
+        logger.info("Unnamed/default-named suite rejected: " + e.getMessage());
     }
 
     @Test
@@ -130,7 +130,7 @@ public class BlockUniquenessLintVerificationTest {
         Assert.assertTrue(e.getMessage().contains("duplicate block id"),
                 "unexpected message: " + e.getMessage());
         logger.info("Parsed-from-XML suite with a duplicate composite rejected by alter() at load "
-                + "(before any block instantiation): {}", e.getMessage());
+                + "(before any block instantiation): " + e.getMessage());
     }
 
     private XmlSuite blockSuite(String suiteName, String testName) {

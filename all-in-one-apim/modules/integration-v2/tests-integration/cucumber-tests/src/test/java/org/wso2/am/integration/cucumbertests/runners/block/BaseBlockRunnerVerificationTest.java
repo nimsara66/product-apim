@@ -17,8 +17,8 @@
 
 package org.wso2.am.integration.cucumbertests.runners.block;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.testng.Assert;
 import org.testng.ITestContext;
 import org.testng.SkipException;
@@ -33,7 +33,7 @@ import org.testng.annotations.Test;
  */
 public class BaseBlockRunnerVerificationTest {
 
-    private static final Logger logger = LoggerFactory.getLogger(BaseBlockRunnerVerificationTest.class);
+    private static final Log logger = LogFactory.getLog(BaseBlockRunnerVerificationTest.class);
 
     private static final class Probe extends BaseBlockRunner {
     }

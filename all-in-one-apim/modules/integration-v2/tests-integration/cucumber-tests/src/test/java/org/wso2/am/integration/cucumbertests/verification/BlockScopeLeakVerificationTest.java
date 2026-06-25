@@ -17,8 +17,8 @@
 
 package org.wso2.am.integration.cucumbertests.verification;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.testng.Assert;
 import org.testng.TestNG;
 import org.testng.annotations.Test;
@@ -41,7 +41,7 @@ import java.util.Map;
  */
 public class BlockScopeLeakVerificationTest {
 
-    private static final Logger logger = LoggerFactory.getLogger(BlockScopeLeakVerificationTest.class);
+    private static final Log logger = LogFactory.getLog(BlockScopeLeakVerificationTest.class);
 
     private static final int BLOCK_COUNT = 20;
 
@@ -58,8 +58,8 @@ public class BlockScopeLeakVerificationTest {
                 "shared scope maps grew by " + sharedGrowthPos + " despite per-block clear() (leak)");
         Assert.assertEquals(localGrowthPos, 0,
                 "local scope maps grew by " + localGrowthPos + " despite per-block clear() (leak)");
-        logger.info("Positive: {} blocks each cleared on teardown -> shared/local map growth = 0",
-                BLOCK_COUNT);
+        logger.info("Positive: " + BLOCK_COUNT
+                + " blocks each cleared on teardown -> shared/local map growth = 0");
 
         // --- Negative (control): no teardown -> exactly one lingering entry per block ---
         int sharedBeforeNeg = TestContext.sharedScopeCount();
@@ -71,8 +71,8 @@ public class BlockScopeLeakVerificationTest {
                 "expected uncleaned blocks to leave one shared entry each (got " + sharedGrowthNeg + ")");
         Assert.assertEquals(localGrowthNeg, BLOCK_COUNT,
                 "expected uncleaned blocks to leave one local entry each (got " + localGrowthNeg + ")");
-        logger.info("Negative: {} blocks without teardown -> shared/local map growth = {} each "
-                + "(confirms clear() is the reclaiming mechanism)", BLOCK_COUNT, sharedGrowthNeg);
+        logger.info("Negative: " + BLOCK_COUNT + " blocks without teardown -> shared/local map growth = "
+                + sharedGrowthNeg + " each (confirms clear() is the reclaiming mechanism)");
 
         // Reclaim the control run's shared residue. (Local maps are keyed sharedId::class#instance, so
         // they aren't reclaimable by shared id here; harmless as this is a dedicated single-test JVM.)

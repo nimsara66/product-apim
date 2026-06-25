@@ -17,8 +17,8 @@
 
 package org.wso2.am.integration.cucumbertests.verification;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 import org.wso2.am.integration.cucumbertests.utils.ModulePathResolver;
@@ -43,7 +43,7 @@ import java.nio.file.Paths;
  */
 public class DynamicApimContainerVerificationTest {
 
-    private static final Logger logger = LoggerFactory.getLogger(DynamicApimContainerVerificationTest.class);
+    private static final Log logger = LogFactory.getLog(DynamicApimContainerVerificationTest.class);
     private static final String VERIFY_LABEL_KEY = "verify-step";
     private static final String VERIFY_LABEL_VALUE = "1.1";
 
@@ -100,8 +100,8 @@ public class DynamicApimContainerVerificationTest {
         Assert.assertTrue(pollUntilPortReleased(host, servletHttpsMapped),
                 "host port " + servletHttpsMapped + " still accepts connections after stop()");
 
-        logger.info("Phase 1.1 in-JVM assertions passed (mapped servlet-https port was {})",
-                servletHttpsMapped);
+        logger.info("Phase 1.1 in-JVM assertions passed (mapped servlet-https port was "
+                + servletHttpsMapped + ")");
     }
 
     private boolean pollUntilHealthy(String url) {
