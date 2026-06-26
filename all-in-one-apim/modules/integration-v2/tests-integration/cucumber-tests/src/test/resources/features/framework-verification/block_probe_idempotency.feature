@@ -1,3 +1,4 @@
+@framework
 Feature: Framework Verification 5.7 - provisioning is idempotent (skip-if-exists no-ops on re-run)
 
   The block sets initTenantUsers=true, so BlockLifecycleListener provisions the default tenant set into the

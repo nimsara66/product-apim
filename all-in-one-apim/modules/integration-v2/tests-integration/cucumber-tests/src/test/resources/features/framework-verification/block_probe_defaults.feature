@@ -1,3 +1,4 @@
+@framework
 Feature: Framework Verification 4.14 (defaults) - a block with no overlay param defaults safely
 
   Drives the no-parameter path of BlockLifecycleListener. This block's <test> sets no tomlOverlayPath,

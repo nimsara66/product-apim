@@ -1,3 +1,4 @@
+@framework
 Feature: Framework Verification 4.10 - double-stop is idempotent
 
   Drives the teardown-idempotency gate. The probe waits for readiness, records its observation, then

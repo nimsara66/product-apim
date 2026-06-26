@@ -1,3 +1,4 @@
+@framework
 Feature: Framework Verification 5.3 - lifecycle provisioning lands in the freshly booted container
 
   The block sets initTenantUsers=true, so BlockLifecycleListener provisions the default tenant set into

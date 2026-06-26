@@ -1,3 +1,4 @@
+@framework
 Feature: Framework Verification 1.3 - end-to-end API lifecycle through dynamic ports
 
   Proves the create -> deploy -> publish -> subscribe -> token -> invoke flow still works when the

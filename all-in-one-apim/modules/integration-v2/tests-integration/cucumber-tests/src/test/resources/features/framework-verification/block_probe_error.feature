@@ -1,3 +1,4 @@
+@framework
 Feature: Framework Verification 4.8 - erroring probe still releases its block container
 
   Companion to block_probe_fail.feature. The probe waits for readiness, records its observation, then

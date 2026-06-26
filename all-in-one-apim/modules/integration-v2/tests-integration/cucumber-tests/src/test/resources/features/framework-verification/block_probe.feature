@@ -1,3 +1,4 @@
+@framework
 Feature: Framework Verification 4.x - per-block probe
 
   Minimal probes for the parallel-on-shared-container lane. The block's single APIM server is booted

@@ -1,3 +1,4 @@
+@framework
 Feature: Framework Verification 4.14 (overlay) - a block with an overlay param ships it into the container
 
   Drives the tomlOverlayPath path of BlockLifecycleListener. This block's <test> points tomlOverlayPath

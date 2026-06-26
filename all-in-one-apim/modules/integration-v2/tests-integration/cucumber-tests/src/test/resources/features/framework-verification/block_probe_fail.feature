@@ -1,3 +1,4 @@
+@framework
 Feature: Framework Verification 4.8 - failing probe still releases its block container
 
   Drives the teardown-on-FAILURE gate. The block's container is booted by BlockLifecycleListener; the
