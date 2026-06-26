@@ -55,6 +55,7 @@ import javax.net.ssl.SSLContext;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
+import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
@@ -70,9 +71,14 @@ public class SimpleHTTPClient {
     private SimpleHTTPClient()  {
 
         try {
-            // Initialize SSL Context to trust all certificates
+            // Initialize SSL Context to trust all certificates. Seed it with an empty in-memory trust
+            // store so the JDK never reads the default cacerts: on some CI runners that keystore fails to
+            // open (UnrecoverableKeyException: Password verification failed), which would abort client init.
+            // TrustAllStrategy remains the sole trust decision (it trusts everything), so behaviour is the same.
+            KeyStore emptyTrustStore = KeyStore.getInstance(KeyStore.getDefaultType());
+            emptyTrustStore.load(null, null);
             SSLContext sslContext = SSLContexts.custom()
-                    .loadTrustMaterial(new TrustAllStrategy())
+                    .loadTrustMaterial(emptyTrustStore, new TrustAllStrategy())
                     .build();
 
             // Disable hostname mismatch checks
@@ -101,7 +107,8 @@ public class SimpleHTTPClient {
                     .disableCookieManagement() // Disable sending or storing cookies
                     .build();
 
-        } catch (NoSuchAlgorithmException | KeyStoreException | KeyManagementException e) {
+        } catch (NoSuchAlgorithmException | KeyStoreException | KeyManagementException
+                | java.security.cert.CertificateException | java.io.IOException e) {
             throw new RuntimeException("Failed to initialize SimpleHTTPClient with SSL context", e);
         }
     }
