@@ -4,7 +4,9 @@
 Single pass: builds a Markdown capability->feature->scenario tree (empty branches shown as gaps) and
 validates every product scenario's tags against the curated skeleton. Invalid/untagged product
 scenarios go to an "Unmapped / invalid" bucket; the script exits non-zero if that bucket is non-empty
-so it can be wired as a CI gate. See TAGGING-CONVENTIONS.md.
+so it can be wired as a CI gate. Non-product scenarios (@infra/@framework/@migration/@setup) are
+excluded from the tree. @setup marks reusable prerequisite features and is bidirectional with the
+`_setup_` filename prefix (one without the other is a lint violation). See TAGGING-CONVENTIONS.md.
 
 Dependency-free (stdlib only). capability-map.yml must keep its simple documented shape.
 
@@ -20,7 +22,8 @@ DEFAULT_FEATURES = os.path.normpath(
     os.path.join(HERE, "..", "..", "tests-integration", "cucumber-tests", "src", "test", "resources", "features"))
 DEFAULT_OUT = os.path.join(HERE, "coverage-tree.md")
 
-EXCLUSION = {"infra", "framework", "migration"}
+EXCLUSION = {"infra", "framework", "migration", "setup"}
+SETUP_PREFIX = "_setup_"
 VALID_TYPES = {"smoke", "negative", "regression"}
 SCENARIO_RE = re.compile(r"^\s*(Scenario Outline|Scenario):\s*(.*)$")
 FEATURE_RE = re.compile(r"^\s*Feature:\s*(.*)$")
@@ -116,6 +119,12 @@ def classify(scenarios, caps):
     placed = {c: {f: [] for f in caps[c]["features"]} for c in caps}
     excluded, invalid = [], []
     for sc in scenarios:
+        is_setup_file = os.path.basename(sc["file"]).startswith(SETUP_PREFIX)
+        has_setup_tag = "setup" in sc["bare"]
+        if is_setup_file != has_setup_tag:
+            invalid.append((sc, "file is _setup_* but scenario is not tagged @setup" if is_setup_file
+                            else "scenario tagged @setup but file is not named _setup_*"))
+            continue
         excl = sc["bare"] & EXCLUSION
         if excl:
             excluded.append((sc, sorted(excl)))
@@ -154,7 +163,7 @@ def render(caps, placed, excluded, invalid):
            ""]
     total = sum(len(v) for c in placed.values() for v in c.values())
     out.append(f"**{total}** product scenarios placed · **{len(excluded)}** excluded "
-               f"(infra/framework/migration) · **{len(invalid)}** unmapped/invalid.")
+               f"(infra/framework/migration/setup) · **{len(invalid)}** unmapped/invalid.")
     out.append("")
     out.append("```")
     out.append("integration-v2 product tests")

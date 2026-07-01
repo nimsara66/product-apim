@@ -29,7 +29,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # .../cucumber-tests/src/test/scripts/verification -> module root is 4 levels up
 MODULE_DIR="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 REACTOR_DIR="$(cd "${MODULE_DIR}/../.." && pwd)"   # integration-v2 root
-BASE_TOML="${MODULE_DIR}/src/test/resources/artifacts/configFiles/basic/deployment.toml"
+# The full-file tomlOverlayPath replaces the whole config verbatim, so the base must be a COMPLETE bootable
+# toml. Use the product distribution deployment.toml (the image's built-in config) — NOT basic/deployment.toml,
+# which is now an overlay merged onto the distribution and is not bootable on its own.
+BASE_TOML="${MODULE_DIR}/../../../distribution/product/src/main/conf/deployment.toml"
 OVERLAY_TOML="${MODULE_DIR}/target/fv-4.14-deployment.toml"
 OBS_FILE="${MODULE_DIR}/target/fv-block-observations.txt"
 MVN_LOG="${MODULE_DIR}/target/verify-4.14-maven.log"

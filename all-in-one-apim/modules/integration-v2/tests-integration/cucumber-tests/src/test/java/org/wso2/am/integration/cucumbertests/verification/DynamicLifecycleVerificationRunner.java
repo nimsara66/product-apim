@@ -45,6 +45,8 @@ public class DynamicLifecycleVerificationRunner extends AbstractTestNGCucumberTe
 
     @BeforeClass(alwaysRun = true)
     public void beforeClass() {
+        // Publish the super tenant under its domain key — the same shape TenantUserProvisioner uses — so
+        // Identity.resolveActor(null) finds the default actor (super-tenant admin). No CURRENT_TENANT slot.
         Tenant superTenant = new Tenant();
         superTenant.setDomain(Constants.SUPER_TENANT_DOMAIN);
         User admin = new User();
@@ -52,12 +54,11 @@ public class DynamicLifecycleVerificationRunner extends AbstractTestNGCucumberTe
         admin.setUserName(Constants.SUPER_TENANT_ADMIN_USERNAME);
         admin.setPassword(Constants.SUPER_TENANT_ADMIN_PASSWORD);
         superTenant.setTenantAdmin(admin);
-        superTenant.setContextUser(admin);
-        TestContext.set(Constants.CURRENT_TENANT, superTenant);
+        TestContext.set(Constants.SUPER_TENANT_DOMAIN, superTenant);
     }
 
     @AfterClass(alwaysRun = true)
     public void afterClass() {
-        TestContext.remove(Constants.CURRENT_TENANT);
+        TestContext.remove(Constants.SUPER_TENANT_DOMAIN);
     }
 }

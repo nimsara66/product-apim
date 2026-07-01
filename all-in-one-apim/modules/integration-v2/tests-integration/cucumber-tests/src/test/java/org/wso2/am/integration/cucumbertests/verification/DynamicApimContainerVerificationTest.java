@@ -51,8 +51,9 @@ public class DynamicApimContainerVerificationTest {
     public void verifyDynamicPortLifecycle() throws Exception {
 
         String moduleDir = ModulePathResolver.getModuleDir(DynamicApimContainerVerificationTest.class);
-        String baseTomlPath = Paths.get(moduleDir, Constants.DEFAULT_TOML_PATH).toString();
-        String tomlContent = Files.readString(Path.of(baseTomlPath));
+        // `basic` is an overlay, not a complete config — merge it onto the distribution the same way the
+        // production block lane does, otherwise the container boots under-configured and exits at startup.
+        String tomlContent = Utils.resolveDefaultToml(moduleDir);
 
         DynamicApimContainer container = new DynamicApimContainer("verify-1.1", tomlContent);
         container.withLabel(VERIFY_LABEL_KEY, VERIFY_LABEL_VALUE);

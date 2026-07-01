@@ -23,6 +23,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.am.integration.cucumbertests.utils.ModulePathResolver;
 import org.wso2.am.integration.cucumbertests.utils.TestContext;
+import org.wso2.am.integration.cucumbertests.utils.Utils;
 import org.wso2.am.integration.test.utils.Constants;
 import org.wso2.am.testcontainers.DynamicApimContainer;
 
@@ -50,8 +51,8 @@ public class DynamicContainerVerificationSteps {
     @Given("I have initialized a dynamic API Manager container with label {string}")
     public void initializeDynamicAPIMContainer(String label) throws IOException {
 
-        String baseTomlPath = Paths.get(callerModuleDir, Constants.DEFAULT_TOML_PATH).toString();
-        String tomlContent = Files.readString(Path.of(baseTomlPath));
+        // `basic` is an overlay — merge onto the distribution as the production block lane does.
+        String tomlContent = Utils.resolveDefaultToml(callerModuleDir);
 
         DynamicApimContainer container = new DynamicApimContainer(label, tomlContent);
         container.withLabel(VERIFY_LABEL_KEY, VERIFY_LABEL_VALUE);

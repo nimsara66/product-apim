@@ -19,7 +19,9 @@ package org.wso2.am.integration.cucumbertests.runners.block;
 
 import io.cucumber.testng.AbstractTestNGCucumberTests;
 import org.testng.ITestContext;
+import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
+import org.wso2.am.integration.cucumbertests.utils.ResourceCleanup;
 
 /**
  * Base class for runners in the parallel-on-shared-container lane. Each {@code <test>} block boots a
@@ -43,5 +45,20 @@ public abstract class BaseBlockRunner extends AbstractTestNGCucumberTests {
         if (bootError != null) {
             throw new IllegalStateException("APIM block boot failed", (Throwable) bootError);
         }
+    }
+
+    /**
+     * Runner-scoped teardown: deletes every API/application this runner registered, once, after all its
+     * scenarios complete and before {@code BlockLifecycleListener.onFinish} stops the container. This is the
+     * teardown path for the {@code _setup_*} fixture pattern, where resources created by a setup feature are
+     * consumed by several later scenarios in the same runner and so must outlive a per-scenario
+     * {@code @After("@cleanup")} hook. It is idempotent and best-effort, so it harmlessly complements that
+     * hook for scenarios that already cleaned up after themselves. Runs on the same runner instance, so it
+     * sees the same {@code TestContext} local scope the scenarios accumulated into (set per invocation by
+     * {@code BlockScopeListener}, which also scopes {@code @AfterClass} config methods).
+     */
+    @AfterClass(alwaysRun = true)
+    void cleanUpRunnerResources() {
+        ResourceCleanup.deleteRegisteredResources();
     }
 }

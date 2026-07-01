@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 #
+# DEPRECATED 2026-06-30: superseded — its design assumptions changed (the actor model / basic-as-overlay /
+# legacy-lane removal). Intentionally NOT run so fv sweeps stay green and nobody re-diagnoses an expected
+# failure. Rationale + replacement are in docs/devs/parallel-framework-implementation-plan.md (the [-] note);
+# the equivalent property is verified by Phase 7 against the current model.
+echo "VERIFY 1.3: DEPRECATED (superseded) - not run; see parallel-framework-implementation-plan.md"
+exit 0
+#
 # Phase 1.3 verification — end-to-end API lifecycle through dynamic ports.
 #
 # Drives DCR -> token -> create -> deploy -> publish -> subscribe -> token -> invoke against a

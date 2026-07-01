@@ -14,6 +14,7 @@ capabilities:
     features:
       api-lifecycle:     { name: Create / deploy / publish / retire / delete }
       api-config:        { name: Runtime config, endpoints, custom properties, resources, CORS }
+      operation-policies: { name: Operation policy CRUD (common & API-specific) }
       scopes:            { name: API scopes & shared scopes (assignment) }
       versioning:        { name: API versioning & version-copy }
       definitions:       { name: OAS / WSDL import-export, SOAP-to-REST }
@@ -23,6 +24,7 @@ capabilities:
       visibility:        { name: Publisher-side visibility & access control }
       graphql-design:    { name: GraphQL API design & schema }
       streaming-design:  { name: Streaming (WebSocket/WebSub/Async) API design }
+      soap-design:       { name: SOAP (passthrough) API design }
       service-catalog:   { name: Service catalog }
 
   devportal:
@@ -73,6 +75,7 @@ capabilities:
       multiple-client-secrets: { name: Multiple client secrets }
       token-issuance:          { name: Token issuance (access / refresh / sandbox) }
       token-revocation:        { name: Token revocation }
+      token-persistence:       { name: Token state persistence across server restart }
       backend-jwt:             { name: Backend JWT generation }
       scope-issuance:          { name: Scope issuance in tokens }
 

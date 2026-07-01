@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 #
+# DEPRECATED 2026-06-30: superseded — its design assumptions changed (the actor model / basic-as-overlay /
+# legacy-lane removal). Intentionally NOT run so fv sweeps stay green and nobody re-diagnoses an expected
+# failure. Rationale + replacement are in docs/devs/parallel-framework-implementation-plan.md (the [-] note);
+# the equivalent property is verified by Phase 7 against the current model.
+echo "VERIFY 2.1: DEPRECATED (superseded) - not run; see parallel-framework-implementation-plan.md"
+exit 0
+#
 # Phase 2.1 verification — namespaced shared-scope key.
 #
 # Type-A (no Docker): runs the isolated Phase 2.1 suite, which orchestrates two nested TestNG suites

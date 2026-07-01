@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 #
+# DEPRECATED 2026-06-30: superseded — its design assumptions changed (the actor model / basic-as-overlay /
+# legacy-lane removal). Intentionally NOT run so fv sweeps stay green and nobody re-diagnoses an expected
+# failure. Rationale + replacement are in docs/devs/parallel-framework-implementation-plan.md (the [-] note);
+# the equivalent property is verified by Phase 7 against the current model.
+echo "VERIFY 3.1: DEPRECATED (superseded) - not run; see parallel-framework-implementation-plan.md"
+exit 0
+#
 # Phase 3.1 verification — suite/test-name uniqueness lint.
 #
 # Type-A (no Docker): runs the isolated Phase 3.1 suite, which drives the new BlockUniquenessLintListener

@@ -17,7 +17,7 @@ in [`capability-map.yml`](capability-map.yml).
 | `@legacy` | `@legacy:<Class>` | 0+ | no | Legacy TestNG class this scenario replaces |
 
 Exclusion markers (mutually exclusive with the above; mark non-product scenarios):
-`@infra` · `@framework` · `@migration`.
+`@infra` · `@framework` · `@migration` · `@setup`.
 
 IDs are lowercase kebab-case. `@cap`/`@feat` values must exist in `capability-map.yml`.
 
@@ -80,8 +80,30 @@ scenario replaces several legacy methods/classes.
 ## Exclusion markers
 
 Non-product scenarios carry exactly one of `@infra` (system init/shutdown, provisioning),
-`@framework` (block probes, framework self-tests), or `@migration` (migration suite). The renderer
-skips these from the product tree but still checks they're well-formed.
+`@framework` (block probes, framework self-tests), `@migration` (migration suite), or `@setup`
+(reusable prerequisite features — see below). The renderer skips these from the product tree but
+still checks they're well-formed.
+
+## `@setup` — reusable prerequisite features
+
+A `@setup` feature builds prerequisites that a real product feature needs but does **not** itself
+assert against — most commonly a created/deployed/published API. It exists so a consumer feature can
+test its own capability without re-proving the setup. Rules:
+
+- **It asserts nothing about coverage.** A setup feature performs real actions (e.g. create → deploy →
+  publish) but is a *means*, not a subject. It is excluded from the coverage tree so that publishing
+  done here is **never** miscounted as `publisher/api-lifecycle` coverage — that coverage must come
+  from the real `api-lifecycle` feature.
+- **Bidirectional `_setup_` filename rule.** A file named `_setup_*.feature` **must** be tagged
+  `@setup`, and a `@setup` feature **must** be named `_setup_*.feature`. Either one without the other
+  is a lint failure. This catches a prereq file that forgot the tag (would wrongly count as coverage)
+  and a real test accidentally tagged `@setup` (would silently vanish from the tree).
+- **How it's used.** List the setup feature **first** in a runner's `features = {…}` array so it runs
+  before the consumers (scenarios within a runner run sequentially). It creates **uniquely-named**
+  resources into the per-runner **local** context and registers them for `@After` cleanup. The file is
+  reused **by reference** across many runners; each runner runs its own isolated copy and resources.
+- **Don't `@dep` the baseline.** A consumer needing a published API is the universal baseline, so it
+  does **not** carry `@dep:publisher`. Reserve `@dep` for non-obvious cross-capability prerequisites.
 
 ## Examples
 
@@ -116,10 +138,13 @@ The renderer (`render_coverage_tree.py`) validates, in one pass, that every **pr
 3. any `@type` value is one of `smoke`/`negative`/`regression`;
 4. any `@dep` value is a valid capability id.
 
+It also enforces the bidirectional `_setup_`⟺`@setup` rule on **every** scenario (product or not):
+a `_setup_*.feature` must be `@setup` and vice-versa, or the scenario goes to the invalid bucket.
+
 Anything failing goes to an **Unmapped / invalid** bucket and the tool **exits non-zero** — wire it as
-a CI gate. Excluded (`@infra`/`@framework`/`@migration`) scenarios are checked only for being
-well-formed. This is convention validation, **not** a coverage gap-finder — empty branches in the tree
-are shown, never failed.
+a CI gate. Excluded (`@infra`/`@framework`/`@migration`/`@setup`) scenarios are checked only for being
+well-formed (and, for `@setup`, the filename rule). This is convention validation, **not** a coverage
+gap-finder — empty branches in the tree are shown, never failed.
 
 ## Running
 

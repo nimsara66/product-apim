@@ -151,6 +151,14 @@ module.exports = {
         env: {
           PORT: 3018
     }
+  },
+  {
+    name: "soap-stub",
+    script: "./soap-stub/server.js",
+        cwd: "./",
+        env: {
+          PORT: 3019
+    }
   }
   ]
 };

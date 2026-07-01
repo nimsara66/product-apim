@@ -72,6 +72,9 @@ public class Constants {
     public static final String APIM_DB_NAME = "WSO2AM_APIMGT_DB";
     public static final String SHARED_DB_NAME = "WSO2AM_COMMON_DB";
 
+    public static final String DEFAULT_APIM_REVOKE_EP = "oauth2/revoke";
+    public static final String DEFAULT_APIM_USERINFO_EP = "oauth2/userinfo";
+
     public static final String SHARED_DATABASE_TYPE = "SHARED_DATABASE_TYPE";
     public static final String SHARED_DATABASE_DRIVER = "SHARED_DATABASE_DRIVER";
     public static final String SHARED_DATABASE_URL = "SHARED_DATABASE_URL";
@@ -105,6 +108,13 @@ public class Constants {
     public static final String MIGRATED_SUBSCRIBER_USER_KEY = "subscriberKey1";
     public static final String USER_KEY = "userKey1";
 
+    // Role-specific actor keys provisioned into both carbon.super and tenant1.com so publisher tests can run
+    // as a least-privilege non-admin publisher, and negative tests as a subscriber-only (self-signup) user.
+    // PUBLISHER_USER_KEY carries Internal/creator + Internal/publisher (creator is required to author the API;
+    // publisher to take it through lifecycle) — deliberately NOT admin (no apim:admin scope).
+    public static final String PUBLISHER_USER_KEY = "publisherUser";
+    public static final String SUBSCRIBER_USER_KEY = "subscriberUser";
+
     public static final String ADPSAMPLE_TENANT_DOMAIN = "adpsample.com";
     public static final String ADPSAMPLE_TENANT_ADMIN_USERNAME = "admin@adpsample.com";
     public static final String ADPSAMPLE_TENANT_ADMIN_PASSWORD = "admin";
@@ -115,6 +125,11 @@ public class Constants {
     public static final String NEW_TENANT_DOMAIN = "tenant1.com";
     public static final String NEW_TENANT_ADMIN_USER_KEY = "admin";
     public static final String NEW_TENANT_USER_KEY = "userKey1";
+
+    public static final String CREATED_API_IDS = "createdApiIds";
+    public static final String CREATED_APPLICATION_IDS = "createdApplicationIds";
+    public static final String CREATED_SHARED_SCOPE_IDS = "createdSharedScopeIds";
+    public static final String CREATED_OPERATION_POLICY_IDS = "createdOperationPolicyIds";
 
     public static class REQUEST_HEADERS {
 

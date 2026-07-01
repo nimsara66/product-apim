@@ -80,4 +80,48 @@ public final class ServerReadiness {
         }
         return false;
     }
+
+    /**
+     * Awaits a server restart by tracking the health-check through a DOWN then UP transition. A graceful
+     * restart ({@code restartGracefully}) returns BEFORE the JVM halts (it drains in-flight requests first),
+     * so the server is briefly still serving 200 after the call — a naive {@link #awaitReady} would return
+     * immediately on the not-yet-restarted server. This first waits until the health-check stops returning 200
+     * (the server going down), then waits until it returns 200 again (back up). Each phase is bounded by
+     * {@code SERVER_STARTUP_WAIT_TIME}.
+     *
+     * @param baseUrl the servlet base URL of the APIM node
+     * @return {@code true} if the server was observed going down and then becoming ready again
+     */
+    public static boolean awaitRestart(String baseUrl) {
+        if (!awaitUnready(baseUrl, Constants.SERVER_STARTUP_WAIT_TIME)) {
+            logger.error("APIM server did not go down after the restart request; restart may not have taken effect");
+            return false;
+        }
+        logger.info("APIM server went down for restart; waiting for it to come back up...");
+        return awaitReady(baseUrl, Constants.SERVER_STARTUP_WAIT_TIME);
+    }
+
+    /** Polls the health-check until it is NOT 200 (or the port is closed), i.e. the server has gone down. */
+    private static boolean awaitUnready(String baseUrl, long timeoutMillis) {
+        String url = Utils.getGatewayHealthCheckURL(baseUrl);
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                HttpResponse response = SimpleHTTPClient.getInstance().doGet(url, null);
+                if (response == null || response.getResponseCode() != 200) {
+                    return true;
+                }
+            } catch (Exception e) {
+                // Connection refused / reset — the server is down.
+                return true;
+            }
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
+    }
 }

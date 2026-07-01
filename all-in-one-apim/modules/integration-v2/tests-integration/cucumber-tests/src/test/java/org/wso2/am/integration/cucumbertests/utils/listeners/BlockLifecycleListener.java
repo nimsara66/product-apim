@@ -30,6 +30,7 @@ import org.wso2.am.integration.cucumbertests.utils.TestContext;
 import org.wso2.am.integration.cucumbertests.utils.Utils;
 import org.wso2.am.integration.test.utils.Constants;
 import org.wso2.am.testcontainers.DynamicApimContainer;
+import org.wso2.am.testcontainers.NodeAppServer;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -62,11 +63,23 @@ public class BlockLifecycleListener implements ITestListener {
     /** Optional {@code <parameter>} names read from the block's {@code <test>}. */
     static final String PARAM_BLOCK_LABEL = "blockLabel";
     static final String PARAM_TOML_OVERLAY = "tomlOverlayPath";
+    /**
+     * Optional path to a small feature-specific TOML overlay merged on top of the default {@code basic}
+     * overlay (which is itself merged onto the product distribution config). Use this — not the full-file
+     * {@code tomlOverlayPath} — when a block only needs a few extra keys (e.g. a custom auth header or
+     * application sharing) so it still inherits the distribution + basic defaults.
+     */
+    static final String PARAM_TOML_EXTRA_OVERLAY = "tomlExtraOverlayPath";
     /** When {@code true}, onStart provisions tenants/users into the block's own container after readiness. */
     static final String PARAM_INIT_TENANT_USERS = "initTenantUsers";
     /** Selects which tenant/user set to provision: {@code default} (the else branch) or {@code adpsample}. */
     static final String PARAM_TENANT_SET = "tenantSet";
     static final String TENANT_SET_ADPSAMPLE = "adpsample";
+    /**
+     * When {@code true}, onStart ensures the shared NodeAppServer backend (network alias {@code nodebackend})
+     * is running before APIM boots, so gateway-invocation tests have a reachable backend for deployed APIs.
+     */
+    static final String PARAM_INIT_BACKEND = "initBackend";
 
     @Override
     public void onStart(ITestContext context) {
@@ -83,6 +96,13 @@ public class BlockLifecycleListener implements ITestListener {
         TestContext.setScope(sharedScopeId, sharedScopeId);
 
         try {
+            // Start the shared backend first (idempotent singleton on the shared network) when the block opts
+            // in, so APIs deployed by gateway-invocation tests have a reachable "nodebackend" upstream.
+            if (Boolean.parseBoolean(param(context, PARAM_INIT_BACKEND))) {
+                NodeAppServer.getInstance();
+                logger.info("Block '" + label + "' ensured NodeAppServer backend is running");
+            }
+
             DynamicApimContainer container = new DynamicApimContainer(label, resolveTomlContent(context));
             container.withLabel("block", label);
             container.start();
@@ -153,13 +173,26 @@ public class BlockLifecycleListener implements ITestListener {
             TenantUserProvisioner.addUser(Constants.ADPSAMPLE_TENANT_DOMAIN, "userKey1",
                     "testTenantUser11", "testTenantUser11", "ADP_CREATOR, ADP_PUBLISHER, ADP_SUBSCRIBER");
         } else {
-            String roles = "Internal/creator, Internal/publisher, Internal/subscriber";
+            String allRoles = "Internal/creator, Internal/publisher, Internal/subscriber";
+            String publisherRoles = "Internal/creator, Internal/publisher";
+            String subscriberRoles = "Internal/subscriber";
             TenantUserProvisioner.addSuperTenant();
             TenantUserProvisioner.addTenant("tenant1.com", "admin", "admin", "First", "Tenant",
                     "admin@tenant1.com");
-            TenantUserProvisioner.addUser(Constants.SUPER_TENANT_DOMAIN, "userKey1",
-                    "testUser1", "testUser1", roles);
-            TenantUserProvisioner.addUser("tenant1.com", "userKey1", "testUser11", "testUser11", roles);
+            // Keep the original all-roles user (back-compat for any actor that needs creator+publisher+subscriber).
+            TenantUserProvisioner.addUser(Constants.SUPER_TENANT_DOMAIN, Constants.USER_KEY,
+                    "testUser1", "testUser1", allRoles);
+            TenantUserProvisioner.addUser("tenant1.com", Constants.USER_KEY, "testUser11", "testUser11", allRoles);
+            // Least-privilege publisher (creator+publisher, NOT admin) — the default actor for publisher tests.
+            TenantUserProvisioner.addUser(Constants.SUPER_TENANT_DOMAIN, Constants.PUBLISHER_USER_KEY,
+                    "publisherUser1", "publisherUser1", publisherRoles);
+            TenantUserProvisioner.addUser("tenant1.com", Constants.PUBLISHER_USER_KEY,
+                    "publisherUser11", "publisherUser11", publisherRoles);
+            // Subscriber-only (self-signup-equivalent) — for access-control negatives (publisher ops -> 403).
+            TenantUserProvisioner.addUser(Constants.SUPER_TENANT_DOMAIN, Constants.SUBSCRIBER_USER_KEY,
+                    "subscriberUser1", "subscriberUser1", subscriberRoles);
+            TenantUserProvisioner.addUser("tenant1.com", Constants.SUBSCRIBER_USER_KEY,
+                    "subscriberUser11", "subscriberUser11", subscriberRoles);
         }
         logger.info("Block '" + label + "' provisioned tenant set '"
                 + (tenantSet == null || tenantSet.isBlank() ? "default" : tenantSet) + "'");
@@ -176,6 +209,15 @@ public class BlockLifecycleListener implements ITestListener {
         String moduleDir = ModulePathResolver.getModuleDir(BlockLifecycleListener.class);
         Path basePath = Paths.get(moduleDir, Constants.DISTRIBUTION_TOML_PATH).normalize();
         Path overlay = Paths.get(moduleDir, Constants.DEFAULT_TOML_PATH).normalize();
+
+        // A block may layer a small feature-specific overlay on top of basic (e.g. custom auth header /
+        // application sharing) without restating the whole distribution config.
+        String extraOverlayPath = param(context, PARAM_TOML_EXTRA_OVERLAY);
+        if (extraOverlayPath != null && !extraOverlayPath.isBlank()) {
+            Path extraOverlay = Paths.get(moduleDir, extraOverlayPath).normalize();
+            return Utils.mergeTomls(basePath.toString(),
+                    java.util.List.of(overlay.toString(), extraOverlay.toString()));
+        }
         return Utils.mergeToml(basePath.toString(), overlay.toString());
     }
 

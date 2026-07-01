@@ -33,7 +33,7 @@ extraction) and the verification harnesses that prove each piece works.
 
 ## Status legend
 
-`[ ]` todo  · `[~]` in progress · `[x]` done & verified · `[!]` blocked
+`[ ]` todo  · `[~]` in progress / stale-needs-reverify · `[x]` done & verified · `[!]` blocked · `[-]` n/a (superseded)
 
 ## Isolation contract (why there is no baseline-anchor phase)
 
@@ -145,7 +145,7 @@ untouched** so the legacy path keeps working.
   `DynamicApimContainerParallelVerificationTest`: 2 containers booted concurrently, 8 distinct
   host ports, both healthy, all ports released, no leaks.)*
 
-- `[x]` **1.3 Verify — accepted self-URL caveat is actually harmless end-to-end (B).**
+- `[-]` _(DEPRECATED 2026-06-30 — old direct-container e2e-invoke probe; its gateway-invocation property is superseded by **7.7** (and already green via `gateway/*` + the 159-test suite). `verify-1.3.sh` is guarded (exits 0, not run).)_ **1.3 Verify — accepted self-URL caveat is actually harmless end-to-end (B).**
   The risk we accepted: host port ≠ internal port. Prove the flows we *use* still work
   through dynamic ports: DCR → obtain a token (via mapped servlet-https port) → deploy a
   trivial API → **invoke it through the mapped gateway port** and get a valid gateway
@@ -181,7 +181,7 @@ untouched** so the legacy path keeps working.
 Implements **`<test name>` uniqueness, part 1**: key the shared scope by
 `suiteName::testName` so same-named blocks can't merge state.
 
-- `[x]` **2.1 Add centralized derivation `TestContext.sharedScopeId(ITestContext)`**
+- `[-]` _(N/A 2026-06-30 — verify-2.1's legacy-`testng.xml` listener-wiring assertion is superseded by the v2 lane; the v2 scope derivation itself stays verified by 2.2/2.3.)_ **2.1 Add centralized derivation `TestContext.sharedScopeId(ITestContext)`**
   (additive — new method only) returning `ctx.getSuite().getName() + "::" + ctx.getName()`.
   Then add a **new** `BlockScopeListener` (a new `IInvokedMethodListener`, **not** an edit to
   `TestNameMdcListener`) that calls `TestContext.setScope(...)` using this helper, and
@@ -240,7 +240,7 @@ Implements **`<test name>` uniqueness, part 1**: key the shared scope by
 
 Implements **`<test name>` uniqueness, part 2**: fail fast at suite load, before any boot.
 
-- `[x]` **3.1 Add a new `BlockUniquenessLintListener`** (a **new** `IAlterSuiteListener`,
+- `[-]` _(N/A 2026-06-30 — verify-3.1's legacy-`testng.xml` `ParallelToggleAlterSuiteListener` assertion is superseded by the v2 lane; the v2 uniqueness lint is now `render_coverage_tree.py`, tracked at 7.9.)_ **3.1 Add a new `BlockUniquenessLintListener`** (a **new** `IAlterSuiteListener`,
   **not** an edit to `ParallelToggleAlterSuiteListener`) that validates the **composite**
   `suiteName::testName` for global uniqueness across `suites` + `getChildSuites()`, and
   rejects unnamed/default suite names (TestNG's "Default Suite" fallback would defeat
@@ -481,7 +481,7 @@ not used by this new lane.
        block_probe_overlay.feature, testng-fv-4.14.xml, verify-4.14.sh. -->
 
 
-- `[x]` **4.15 Verify — mixed-lane co-existence (B).** Because listeners are suite-global,
+- `[-]` _(N/A 2026-06-30 — exercises legacy-lane + lifecycle-lane co-existence; the legacy lane it depends on was superseded, so this no longer applies.)_ **4.15 Verify — mixed-lane co-existence (B).** Because listeners are suite-global,
   run a suite containing **both** a legacy fixed-port `<test>` block (SystemInitializationRunner
   + SystemShutdown) **and** a new lifecycle block. The `BlockLifecycleListener` must **no-op**
   for the legacy block (it isn't opted in) and not disturb it; both lanes pass.
@@ -544,7 +544,7 @@ outside a scenario.
        adpsample set, both can be removed as dead code - default would then be the only set. -->
 
 
-- `[x]` **5.3 Verify — provisioning in a fresh container (B).** A block with
+- `[-]` _(DEPRECATED 2026-06-30 — probe asserts pre-actor-model provisioning shape (Tenant bean / `userKey1`); superseded by **7.2 + 7.3** against the actor model. Provisioning itself works: 159-test suite + 6.1 green. `verify-5.3.sh` is guarded (not run).)_ **5.3 Verify — provisioning in a fresh container (B).** A block with
   `initTenantUsers=true` and a probe class.
   - **Verify:** tenant(s) + user(s) exist in the freshly booted container (query back via
     the same SOAP/REST the steps use); the tenant beans are readable from shared scope
@@ -564,7 +564,7 @@ outside a scenario.
        BlockProbeSteps.java. verify-5.3.sh: Maven SUCCESS, 1 observation / 1 distinct real
        container id, no fv-5.3 leak. Re-runnable. VERIFY 5.3: PASS. -->
 
-- `[x]` **5.4 Verify — legacy parity (regression).** The legacy path
+- `[-]` _(N/A 2026-06-30 — verifies the legacy provisioning path, intentionally superseded by the lifecycle-driven actor-model provisioning; current provisioning is covered by 7.2/7.3.)_ **5.4 Verify — legacy parity (regression).** The legacy path
   (`SystemInitializationRunner` + `TenantUserInitializationRunner` + `SystemShutdown`)
   still provisions and runs green, unchanged.
   - **Confirm gate.**
@@ -596,7 +596,7 @@ outside a scenario.
        This also gives the otherwise-dead adpsample branch a verification purpose.
        Re-runnable. VERIFY 5.5: PASS. -->
 
-- `[x]` **5.6 Verify — provisioning targets the block's OWN container under parallelism (B).**
+- `[-]` _(DEPRECATED 2026-06-30 — same pre-actor-model provisioning-shape probe as 5.3 under parallelism; superseded by **7.2 + 7.3**. Per-block isolation itself is green via 6.1. `verify-5.6.sh` is guarded (not run).)_ **5.6 Verify — provisioning targets the block's OWN container under parallelism (B).**
   Two parallel blocks each provisioning (incl. the same tenant domain). Assert each
   provisioner writes to **its own** container's `baseUrl` (mapped port) and that the tenants
   exist in the right container — a wrong-URL bug only manifests under parallel blocks.
@@ -621,7 +621,7 @@ outside a scenario.
        endpoint it needs is live. Re-run: VERIFY 5.6: PASS. (Does not slow 5.5: the super-tenant
        retrieveTenants probe goes ready fast, then the adpsample addUser still fails fast.) -->
 
-- `[x]` **5.7 Verify — provisioning idempotency (B).** Exercise the "skip if exists" branch:
+- `[-]` _(DEPRECATED 2026-06-30 — idempotency probe asserts pre-actor-model re-provisioning behaviour; superseded by **7.2 + 7.3**. `verify-5.7.sh` is guarded (not run).)_ **5.7 Verify — provisioning idempotency (B).** Exercise the "skip if exists" branch:
   provision, then run the same provisioning again against the same container; it must
   no-op without error / double-create. (Guards reuse and retry scenarios.)
   - **Confirm gate.**
@@ -744,6 +744,64 @@ whole-system safety rather than a single phase.
        within the 80% budget. Ran PASS first try. NOTE: safeMaxK is memory-bound only; CPU (6 cores) and
        APIM boot-time contention are the practical ceiling well before K=6 - K=2 remains the recommended
        default (see C.1 for the boot-timeout failure mode on an undersized VM). -->
+
+## Phase 7 — Test-authoring framework features (added during feature porting)
+
+Phases 1–6 verified the **concurrency/lifecycle core** (container, scope key, lint, block lifecycle,
+provisioning, capstone). The mechanisms below were added **afterwards**, while porting the legacy suite, as new
+requirements surfaced. They are now load-bearing framework features with **no dedicated regression test**, so a
+refactor can silently break them — e.g. the actor-model and `basic`-as-overlay design changes already regressed
+several Phase 1–4 probes (2026-06-30 fv sweep). Each item below gets a `verify-7.x.sh` → `testng-fv-7.x.xml`
+(+ a `*VerificationTest` or probe feature), same convention as above. (A) = in-JVM, (B) = boots a container.
+
+**Status (2026-06-30): all complete.** 7.1 and 7.9 are standalone Type-A (`verify-7.1.sh`, `verify-7.9.sh`);
+7.5 is verified by the `key-manager/token-persistence` feature. To keep container boots low, **7.2/7.3/7.4/7.7/7.8
+are jointly verified in one block boot** by `verify-7.2.sh` → `testng-fv-7.2.xml` (the `IntegrationV2-FrameworkFeatures`
+block: `FrameworkFeaturesProbeRunner` covers tenancy/actor/gateway/overlay, `FrameworkFeaturesHandoffRunner`
+covers setup-handoff). 7.6 is by-reference (see its note). All green.
+
+- `[x]` **7.1 Context sharing & scoping (A).** `TestContext` local (runner) vs shared (block) scope: values a
+  setup step stores are visible to later steps/scenarios on the SAME runner instance (incl. Scenario-Outline
+  rows) and on worker threads; `${UNIQUE:...}` yields collision-free names; `{{key}}` placeholders resolve from
+  context; one runner's local scope is NOT visible to another. (CLAUDE.md §4) _(Verified 2026-06-30 via
+  `verify-7.1.sh` → `testng-fv-7.1.xml` + `TestContextScopingVerificationTest`.)_
+- `[x]` **7.2 Tenancy — provisioning + routing (B).** Boot a block with `initTenantUsers=true`: assert
+  `tenant1.com` and its users are provisioned, a Tenant bean is in context, and a resource created as a tenant
+  actor is addressed at the `/t/<tenant>` context (actor `@domain` → tenant routing). (CLAUDE.md §12)
+- `[x]` **7.3 Actor / Identity model + auth keys (B).** Default actors (admin / publisherUser / subscriberUser)
+  provisioned in BOTH tenants; each auth composite mints the right token set (publisher / devportal / admin) for
+  the named actor; `I act as` / `setActingActor` switches the no-arg token resolution; a least-privilege actor is
+  denied an admin-scoped op (401). (CLAUDE.md §12)
+- `[x]` **7.4 Multi-feature runner + setup-fixture handoff (B).** A runner with `features={_setup, consumer}`
+  (ordered): the setup feature creates a resource into runner-local scope; the consumer reads its id+payload and
+  succeeds; the setup resource survives across the consumer's scenarios (untagged `@cleanup`); the `@AfterClass`
+  sweep tears it down once. (CLAUDE.md §10)
+- `[x]` **7.5 Server restart — in-product graceful (B).** With the `enable_restart_from_api` + token-persistence
+  overlay, the `I gracefully restart the API Manager server` step bounces the carbon JVM (ServerAdmin
+  `restartGracefully`), `ServerReadiness.awaitRestart` blocks down→up, the SAME container/ports/DB survive, and a
+  token issued before the restart still validates after. _(Verified 2026-06-30 — the
+  `key-manager/token-persistence` feature IS the probe: a token still validates (200) after a graceful restart
+  and a revoked token stays revoked (401) across a second restart; green in the `IntegrationV2-ServerRestart`
+  block.)_
+- `[x]` **7.6 Cleanup model (B).** Both teardown granularities: the `@After("@cleanup")` hook deletes a
+  scenario's registered resources, and `BaseBlockRunner` `@AfterClass` sweeps the `CREATED_*` lists; cleanup is
+  idempotent (already-deleted → ignored), runs on failure, and is a **no-op when nothing was registered**
+  (actor-less block — regression fixed 2026-06-30). Leaves zero residue. (CLAUDE.md §5) _(Verified by-reference
+  2026-06-30 — exercised by every `@cleanup` product feature (residue would surface as 409s on the shared
+  container) plus the no-op-when-empty fix, which is itself exercised by the actor-less framework-verification
+  probe blocks. No standalone probe.)_
+- `[x]` **7.7 Gateway invocation wiring (B).** With `initBackend=true` the NodeAppServer backend is reachable at
+  alias `nodebackend`; a deployed API is invocable at its full gateway context with no double `/t/` prefix; the
+  `until response status code becomes N within S seconds` retry floors at `DEPLOYMENT_WAIT_TIME`. (CLAUDE.md §11)
+- `[x]` **7.8 TOML config overlays (B).** `tomlExtraOverlayPath`: base + `basic` + extra are merged (extra keys
+  present AND distribution/basic defaults retained); two orthogonal overlays co-exist in one block; the full-file
+  `tomlOverlayPath` still replaces verbatim. Guards `Utils.mergeTomls` / `resolveDefaultToml` /
+  `resolveTomlContent`. (CLAUDE.md §13)
+- `[x]` **7.9 Capability taxonomy lint (A).** `render_coverage_tree.py` accepts the closed `@cap`/`@feat` vocab
+  from `capability-map.yml`, rejects an unknown tag (non-zero `invalid`), enforces the `@setup`↔`_setup_*`
+  filename rule bidirectionally, and excludes non-product markers — run against a fixture with a deliberately bad
+  tag. (CLAUDE.md §3) _(Verified 2026-06-30 via `verify-7.9.sh` — temp-fixture lint: valid→`invalid: 0`/exit 0,
+  unknown @cap and `_setup_`-without-@setup→non-zero exit.)_
 
 ## Out of scope / later
 

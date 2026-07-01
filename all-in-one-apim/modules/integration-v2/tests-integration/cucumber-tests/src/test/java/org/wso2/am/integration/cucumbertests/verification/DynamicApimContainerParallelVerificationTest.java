@@ -61,7 +61,8 @@ public class DynamicApimContainerParallelVerificationTest {
     public void verifyParallelContainersHaveDistinctPortsAndRelease() throws Exception {
 
         String moduleDir = ModulePathResolver.getModuleDir(DynamicApimContainerParallelVerificationTest.class);
-        String tomlContent = Files.readString(Path.of(Paths.get(moduleDir, Constants.DEFAULT_TOML_PATH).toString()));
+        // `basic` is an overlay — merge onto the distribution as the production block lane does.
+        String tomlContent = Utils.resolveDefaultToml(moduleDir);
 
         List<DynamicApimContainer> containers = new ArrayList<>();
         for (int i = 0; i < CONTAINER_COUNT; i++) {

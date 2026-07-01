@@ -24,6 +24,7 @@ import org.apache.commons.logging.LogFactory;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 import org.wso2.am.integration.cucumbertests.utils.ModulePathResolver;
+import org.wso2.am.integration.cucumbertests.utils.Utils;
 import org.wso2.am.integration.test.utils.Constants;
 import org.wso2.am.testcontainers.DynamicApimContainer;
 
@@ -117,7 +118,8 @@ public class DynamicApimContainerMisuseVerificationTest {
 
     private String readDefaultToml() throws Exception {
         String moduleDir = ModulePathResolver.getModuleDir(DynamicApimContainerMisuseVerificationTest.class);
-        return Files.readString(Path.of(Paths.get(moduleDir, Constants.DEFAULT_TOML_PATH).toString()));
+        // `basic` is an overlay — merge onto the distribution as the production block lane does.
+        return Utils.resolveDefaultToml(moduleDir);
     }
 
     private boolean pollUntilPortReleased(String host, int port) {

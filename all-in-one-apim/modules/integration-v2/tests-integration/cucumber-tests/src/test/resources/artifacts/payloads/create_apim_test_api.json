@@ -1,6 +1,6 @@
 {
-  "name": "APIMTest",
-  "context": "apiTestContext",
+  "name": "${UNIQUE:APIMTest}",
+  "context": "${UNIQUE:apiTestContext}",
   "version": "1.0.0",
   "endpointConfig": {
     "endpoint_type": "http",

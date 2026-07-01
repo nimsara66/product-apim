@@ -29,13 +29,13 @@ import org.apache.commons.logging.LogFactory;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.testng.Assert;
+import org.wso2.am.integration.cucumbertests.utils.Identity;
 import org.wso2.am.integration.cucumbertests.utils.RequestAction;
 import org.wso2.am.integration.cucumbertests.utils.ServerReadiness;
 import org.wso2.am.integration.cucumbertests.utils.TestContext;
 import org.wso2.am.integration.test.utils.Constants;
 import org.wso2.am.integration.cucumbertests.utils.Utils;
 import org.wso2.am.integration.cucumbertests.utils.clients.SimpleHTTPClient;
-import org.wso2.carbon.automation.engine.context.beans.Tenant;
 import org.wso2.carbon.automation.engine.context.beans.User;
 import org.wso2.carbon.automation.test.utils.http.client.HttpResponse;
 
@@ -52,9 +52,6 @@ public class BaseSteps {
 
     private static final Log log = LogFactory.getLog(BaseSteps.class);
 
-    private Tenant tenant;
-    private User currentuser;
-
     protected String getBaseUrl() {
 
         Object baseUrlObj = TestContext.get("baseUrl");
@@ -65,38 +62,82 @@ public class BaseSteps {
     }
 
     /**
-     * Initializes the system by retrieving the current tenant and user from the test context.
+     * Readiness assertion only. Server boot/readiness is the block lifecycle listener's job, so this step
+     * no longer caches any "current" tenant/user — it simply confirms the block published a baseUrl. Kept
+     * so existing feature prose ("Given The system is ready") still resolves; carries no ordering contract.
      */
     @Given("The system is ready")
     public void theSystemIsReady() {
 
-        tenant = Utils.getTenantFromContext("currentTenant");
-        currentuser = tenant.getContextUser();
-        log.info("Running with user: " + currentuser.getUserName());
+        getBaseUrl();
     }
 
     /**
-     * Creates a Dynamic Client Registration (DCR) application for the current user.
+     * Sets the scenario's acting actor for subsequent no-arg token lookups. Used by access-control scenarios
+     * that switch identity mid-scenario (e.g. create a resource as a publisher, then act as a subscriber to
+     * prove rejection) and need to switch back — notably so the {@code @cleanup} teardown deletes the
+     * publisher-owned resources using the publisher's token rather than the last-acting (powerless) actor.
+     */
+    @Given("I act as {string}")
+    public void iActAs(String actorRef) {
+        Identity.setActingActor(actorRef);
+    }
+
+    /**
+     * Creates a Dynamic Client Registration (DCR) application for the default actor (super-tenant admin).
      */
     @When("I have a valid DCR application for the current user")
     public void iHaveADCRApplication() throws IOException {
 
+        createDcrApplication(Identity.defaultActor());
+    }
+
+    /**
+     * Creates a DCR application for a named actor (e.g. {@code "userKey1"} or {@code "admin@tenant1.com"}).
+     */
+    @When("I have a valid DCR application as {string}")
+    public void iHaveADCRApplicationAs(String actorRef) throws IOException {
+
+        createDcrApplication(Identity.resolveActor(actorRef));
+    }
+
+    private void createDcrApplication(User actor) throws IOException {
+
         //Create json payload for DCR endpoint
         JsonObject json = new JsonObject();
         json.addProperty("callbackUrl", "test.com");
-        json.addProperty("clientName", "integration_test_app_" + currentuser.getUserNameWithoutDomain() + "_" + currentuser.getUserDomain());
+        json.addProperty("clientName", "integration_test_app_" + actor.getUserNameWithoutDomain() + "_" + actor.getUserDomain());
         json.addProperty("grantType", "client_credentials password refresh_token");
         json.addProperty("saasApp", true);
-        json.addProperty("owner", currentuser.getUserName());
+        json.addProperty("owner", actor.getUserName());
 
         String encodedCredentials = DatatypeConverter.printBase64Binary(
-                    (currentuser.getUserName() + ':' + currentuser.getPassword()).getBytes(StandardCharsets.UTF_8));
+                    (actor.getUserName() + ':' + actor.getPassword()).getBytes(StandardCharsets.UTF_8));
 
         Map<String, String> headers = new HashMap<>();
         headers.put("Authorization", "Basic " + encodedCredentials);
 
-        HttpResponse dcrResponse = SimpleHTTPClient.getInstance().doPost(Utils.getDCREndpointURL(getBaseUrl()), headers, json.toString(),
+        // The gateway health-check can pass before the client-registration webapp finishes deploying, so a
+        // DCR POST fired immediately after boot can hit a transient 500 "Dynamic Client Registration Service
+        // not available" — a race that parallel runners sharing one freshly-booted container widen. Retry the
+        // registration (the failed call creates nothing, so retrying is safe) until it succeeds or the startup
+        // window elapses, mirroring TenantUserProvisioner.awaitTenantMgtServiceReady for the admin services.
+        String dcrUrl = Utils.getDCREndpointURL(getBaseUrl());
+        long deadline = System.currentTimeMillis() + Constants.SERVER_STARTUP_WAIT_TIME;
+        HttpResponse dcrResponse = SimpleHTTPClient.getInstance().doPost(dcrUrl, headers, json.toString(),
                 Constants.CONTENT_TYPES.APPLICATION_JSON);
+        while (dcrResponse.getResponseCode() != 200 && System.currentTimeMillis() < deadline) {
+            log.info("DCR endpoint not ready yet (status " + dcrResponse.getResponseCode()
+                    + "); retrying registration...");
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            dcrResponse = SimpleHTTPClient.getInstance().doPost(dcrUrl, headers, json.toString(),
+                    Constants.CONTENT_TYPES.APPLICATION_JSON);
+        }
         Assert.assertEquals(dcrResponse.getResponseCode(), 200, dcrResponse.getData());
 
         String clientId = Utils.extractValueFromPayload(dcrResponse.getData(), "clientId").toString();
@@ -105,23 +146,38 @@ public class BaseSteps {
         String dcrCredentials = Base64.getEncoder().encodeToString((clientId + ":" + clientSecret)
                 .getBytes(StandardCharsets.UTF_8));
 
-        TestContext.set("dcrCredentials", dcrCredentials);
+        TestContext.set(Identity.dcrCredentialsKey(actor), dcrCredentials);
     }
 
     /**
-     * Obtains a valid Publisher API access token for the current user.
+     * Obtains a valid Publisher API access token for the default actor (super-tenant admin).
      */
     @Given("I have a valid Publisher access token for the current user")
     public void iHaveValidPublisherAccessToken() throws Exception {
 
+        mintPublisherToken(Identity.defaultActor());
+    }
+
+    /**
+     * Obtains a valid Publisher API access token for a named actor.
+     */
+    @Given("I have a valid Publisher access token as {string}")
+    public void iHaveValidPublisherAccessTokenAs(String actorRef) throws Exception {
+
+        mintPublisherToken(Identity.resolveActor(actorRef));
+    }
+
+    private void mintPublisherToken(User actor) throws Exception {
+
         Map<String, String> headers = new HashMap<>();
-        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Basic " + TestContext.get("dcrCredentials").toString());
+        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION,
+                "Basic " + TestContext.get(Identity.dcrCredentialsKey(actor)).toString());
 
         // create json payload to obtain publisher access token
         JsonObject json = new JsonObject();
         json.addProperty("grant_type", "password");
-        json.addProperty("username", currentuser.getUserName());
-        json.addProperty("password", currentuser.getPassword());
+        json.addProperty("username", actor.getUserName());
+        json.addProperty("password", actor.getPassword());
         json.addProperty("scope", "apim:api_view apim:api_create apim:api_publish apim:api_delete apim:api_manage apim:api_import_export apim:subscription_manage apim:client_certificates_add apim:client_certificates_update apim:shared_scope_manage apim:common_operation_policy_manage apim:api_generate_key apim:gateway_policy_manage");
 
         HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getAPIMTokenEndpointURL(getBaseUrl()), headers,
@@ -129,26 +185,41 @@ public class BaseSteps {
         Assert.assertEquals(response.getResponseCode(), 200, response.getData());
 
         String accessToken = Utils.extractValueFromPayload(response.getData(), "access_token").toString();
-        TestContext.set("publisherAccessToken", accessToken);
-        log.info("Obtained Publisher access token for user " + currentuser.getUserName()
+        TestContext.set(Identity.publisherTokenKey(actor), accessToken);
+        log.info("Obtained Publisher access token for user " + actor.getUserName()
                 + " with expires_in (seconds): "
                 + Utils.extractValueFromPayload(response.getData(), "expires_in"));
     }
 
     /**
-     * Obtains a valid Developer Portal access token for the current user.
+     * Obtains a valid Developer Portal access token for the default actor (super-tenant admin).
      */
     @Given("I have a valid Devportal access token for the current user")
     public void iHaveValidDevportalAccessToken() throws Exception {
 
+        mintDevportalToken(Identity.defaultActor());
+    }
+
+    /**
+     * Obtains a valid Developer Portal access token for a named actor.
+     */
+    @Given("I have a valid Devportal access token as {string}")
+    public void iHaveValidDevportalAccessTokenAs(String actorRef) throws Exception {
+
+        mintDevportalToken(Identity.resolveActor(actorRef));
+    }
+
+    private void mintDevportalToken(User actor) throws Exception {
+
         Map<String, String> headers = new HashMap<>();
-        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Basic " + TestContext.get("dcrCredentials").toString());
+        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION,
+                "Basic " + TestContext.get(Identity.dcrCredentialsKey(actor)).toString());
 
         // create json payload to obtain devportal access token
         JsonObject json = new JsonObject();
         json.addProperty("grant_type", "password");
-        json.addProperty("username", currentuser.getUserName());
-        json.addProperty("password", currentuser.getPassword());
+        json.addProperty("username", actor.getUserName());
+        json.addProperty("password", actor.getPassword());
         json.addProperty("scope", "apim:app_manage apim:sub_manage apim:subscribe");
 
         HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getAPIMTokenEndpointURL(getBaseUrl()), headers,
@@ -156,25 +227,31 @@ public class BaseSteps {
         Assert.assertEquals(response.getResponseCode(), 200, response.getData());
 
         String accessToken = Utils.extractValueFromPayload(response.getData(), "access_token").toString();
-        TestContext.set("devportalAccessToken", accessToken);
-        log.info("Obtained Devportal access token for user " + currentuser.getUserName()
+        TestContext.set(Identity.devportalTokenKey(actor), accessToken);
+        log.info("Obtained Devportal access token for user " + actor.getUserName()
                 + " with expires_in (seconds): "
                 + Utils.extractValueFromPayload(response.getData(), "expires_in"));
     }
 
     /**
-     * Obtains a valid Admin access token for the current user.
+     * Obtains a valid Admin access token for the default actor (super-tenant admin).
      */
     public void iHaveValidAdminAccessToken() throws Exception {
 
+        mintAdminToken(Identity.defaultActor());
+    }
+
+    private void mintAdminToken(User actor) throws Exception {
+
         Map<String, String> headers = new HashMap<>();
-        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Basic " + TestContext.get("dcrCredentials").toString());
+        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION,
+                "Basic " + TestContext.get(Identity.dcrCredentialsKey(actor)).toString());
 
         // create json payload to obtain admin access token
         JsonObject json = new JsonObject();
         json.addProperty("grant_type", "password");
-        json.addProperty("username", currentuser.getUserName());
-        json.addProperty("password", currentuser.getPassword());
+        json.addProperty("username", actor.getUserName());
+        json.addProperty("password", actor.getPassword());
         json.addProperty("scope", "apim:admin apim:tier_view apim:api_provider_change");
 
         HttpResponse response = SimpleHTTPClient.getInstance().doPost(Utils.getAPIMTokenEndpointURL(getBaseUrl()), headers,
@@ -182,35 +259,88 @@ public class BaseSteps {
         Assert.assertEquals(response.getResponseCode(), 200, response.getData());
 
         String accessToken = Utils.extractValueFromPayload(response.getData(), "access_token").toString();
-        TestContext.set("adminAccessToken", accessToken);
-        log.info("Obtained Admin access token for user " + currentuser.getUserName()
+        TestContext.set(Identity.adminTokenKey(actor), accessToken);
+        log.info("Obtained Admin access token for user " + actor.getUserName()
                 + " with expires_in (seconds): "
                 + Utils.extractValueFromPayload(response.getData(), "expires_in"));
     }
 
     /**
-     * Composite step that combines system initialization and token retrieval.
+     * Composite step that obtains DCR + all access tokens for the default actor (super-tenant admin).
      */
     @Given("The system is ready and I have valid access tokens for current user")
     public void iHaveSystemAndTokens() throws Exception {
 
         theSystemIsReady();
-        iHaveADCRApplication();
-        iHaveValidPublisherAccessToken();
-        iHaveValidDevportalAccessToken();
-        iHaveValidAdminAccessToken();
+        User actor = Identity.defaultActor();
+        createDcrApplication(actor);
+        mintPublisherToken(actor);
+        mintDevportalToken(actor);
+        mintAdminToken(actor);
     }
 
     /**
-     * Composite step that combines system initialization and devportal token retrieval only.
+     * Composite step that obtains DCR + all access tokens for a named actor (incl. the admin token, so the
+     * actor must have admin rights). Records the actor as the scenario's acting actor so subsequent no-arg
+     * token lookups in the glue resolve to it.
+     */
+    @Given("I have valid access tokens as {string}")
+    public void iHaveTokensAs(String actorRef) throws Exception {
+
+        Identity.setActingActor(actorRef);
+        User actor = Identity.resolveActor(actorRef);
+        createDcrApplication(actor);
+        mintPublisherToken(actor);
+        mintDevportalToken(actor);
+        mintAdminToken(actor);
+    }
+
+    /**
+     * Composite step for a least-privilege publisher actor: DCR + publisher + devportal tokens only (NO admin
+     * token, since a non-admin publisher user is denied the {@code apim:admin} scope). Records the actor as the
+     * scenario's acting actor so the publisher glue's no-arg token lookups resolve to it. This is the default
+     * Background for publisher-plane features, parameterizable over a {@code Scenario Outline} actor column
+     * (e.g. {@code publisherUser} vs {@code publisherUser@tenant1.com}).
+     */
+    @Given("The system is ready and I have valid publisher access tokens as {string}")
+    public void iHavePublisherTokensAs(String actorRef) throws Exception {
+
+        theSystemIsReady();
+        Identity.setActingActor(actorRef);
+        User actor = Identity.resolveActor(actorRef);
+        createDcrApplication(actor);
+        mintPublisherToken(actor);
+        mintDevportalToken(actor);
+    }
+
+    /**
+     * Composite step that obtains DCR + devportal token only for the default actor (super-tenant admin).
      * Useful for subscriber-only users who do not have publisher or admin permissions.
      */
     @Given("The system is ready and I have valid devportal access token for current user")
     public void iHaveSystemAndDevportalToken() throws Exception {
 
         theSystemIsReady();
-        iHaveADCRApplication();
-        iHaveValidDevportalAccessToken();
+        User actor = Identity.defaultActor();
+        createDcrApplication(actor);
+        mintDevportalToken(actor);
+    }
+
+    /**
+     * Composite step for a DevPortal consumer actor: DCR + devportal token only, for a named actor. Records
+     * the actor as the scenario's acting actor so the devportal glue's no-arg token lookups resolve to it.
+     * This is the default Background for devportal-plane features (application CRUD, subscribe, etc.),
+     * parameterizable over a {@code Scenario Outline} actor column (e.g. {@code subscriberUser} vs
+     * {@code subscriberUser@tenant1.com}).
+     */
+    @Given("The system is ready and I have valid devportal access token as {string}")
+    public void iHaveDevportalTokenAs(String actorRef) throws Exception {
+
+        theSystemIsReady();
+        Identity.setActingActor(actorRef);
+        User actor = Identity.resolveActor(actorRef);
+        createDcrApplication(actor);
+        mintDevportalToken(actor);
     }
 
     /**
@@ -242,7 +372,7 @@ public class BaseSteps {
                 throw new FileNotFoundException("File not found on classpath: " + jsonFilePath);
             }
             String jsonPayload = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
-            TestContext.set(Utils.normalizeContextKey(key), jsonPayload);
+            TestContext.set(Utils.normalizeContextKey(key), Utils.resolvePayloadPlaceholders(jsonPayload));
         }
     }
 
@@ -255,7 +385,7 @@ public class BaseSteps {
     @When("I put the following JSON payload in context as {string}")
     public void putJsonPayloadInContext(String key, String docStringJson)  {
 
-        TestContext.set(Utils.normalizeContextKey(key), docStringJson);
+        TestContext.set(Utils.normalizeContextKey(key), Utils.resolvePayloadPlaceholders(docStringJson));
     }
 
     /**
@@ -366,8 +496,12 @@ public class BaseSteps {
     @Then("The response should contain {string}")
     public void responseShouldContainFieldValue(String expectedValue) {
 
-        HttpResponse response = (HttpResponse) TestContext.get("httpResponse");;
-        Assert.assertTrue(response.getData().contains(expectedValue));
+        // Resolve any {{contextKey}} placeholders so assertions can reference uniquely-generated values
+        // (e.g. a ${UNIQUE:...} API name captured into context). Literals without {{}} pass through unchanged.
+        expectedValue = Utils.resolveContextPlaceholders(expectedValue);
+        HttpResponse response = (HttpResponse) TestContext.get("httpResponse");
+        Assert.assertTrue(response.getData().contains(expectedValue),
+                "Expected response to contain '" + expectedValue + "' but it did not: " + response.getData());
     }
 
     /**
@@ -507,8 +641,8 @@ public class BaseSteps {
         HttpResponse updateResponse = (HttpResponse) TestContext.get("httpResponse");
         JSONObject updateResponseJson = new JSONObject(updateResponse.getData());
         String resourceId = updateResponseJson.optString("id", null);
-        Tenant currentTenant = Utils.getTenantFromContext(Constants.CURRENT_TENANT);
-        String tenantDomain = currentTenant.getDomain();
+        User actor = Identity.defaultActor();
+        String tenantDomain = actor.getUserDomain();
 
         if ("endpointConfig".equals(config)){
             expectedConfigValue = Utils.resolveFromContext(expectedConfigValue).toString();
@@ -541,7 +675,7 @@ public class BaseSteps {
                     + resourceId);
             Map<String, String> headers = new HashMap<>();
             headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION,
-                    "Bearer " + TestContext.get("publisherAccessToken").toString());
+                    "Bearer " + Identity.publisherToken(actor));
 
             retrievedResponse = SimpleHTTPClient.getInstance().doGet(
                     Utils.getResourceEndpointURL(getBaseUrl(), resourceType, resourceId), headers);
@@ -624,17 +758,6 @@ public class BaseSteps {
     }
 
     /**
-     * Adds a delay/wait period in the test execution.
-     *
-     * @param seconds The number of seconds to wait
-     */
-    @Then("I wait for {int} seconds")
-    public void waitForSeconds(int seconds) throws InterruptedException {
-
-        Thread.sleep(seconds * 1000L);
-    }
-
-    /**
      * Waits for the APIM server to be ready by polling the gateway health check endpoint.
      */
     @Then("I wait for the APIM server to be ready")
@@ -643,19 +766,6 @@ public class BaseSteps {
         boolean isServerReady = ServerReadiness.awaitReady(getBaseUrl());
         Assert.assertTrue(isServerReady, "APIM server is not ready even after waiting for " +
                 Constants.DEPLOYMENT_WAIT_TIME /60000 + " minutes");
-    }
-
-    /**
-     * Pauses the execution for a fixed duration to allow the indexing engine
-     * and background registry tasks to stabilize after server startup or migration.
-     *
-     * @throws InterruptedException if the sleep thread is interrupted.
-     */
-    @And("I wait for the system indexing to stabilize")
-    public void iWaitToStabilizeIndexing() throws InterruptedException {
-        log.info("Waiting " + (Constants.INITIAL_INDEXING_TIME / 1000) + "s for system indexing to stabilize...");
-        Thread.sleep(Constants.INITIAL_INDEXING_TIME);
-        log.info("Indexing stabilization period completed.");
     }
 
     /**
@@ -670,9 +780,12 @@ public class BaseSteps {
 
         String apiName  = Utils.extractValueFromPayload(actualApiDetailsPayload, "name").toString();
         String apiVersion = Utils.extractValueFromPayload(actualApiDetailsPayload, "version").toString();
-        User tenantAdmin = tenant.getTenantAdmin();
+        // Use the tenant ADMIN (not the acting actor) — the gateway-artifact admin endpoint requires admin
+        // credentials, which a least-privilege publisher actor does not have.
+        User tenantAdmin = Identity.actingTenantAdmin();
+        String tenantDomain = tenantAdmin.getUserDomain();
 
-        String url = Utils.getAPIArtifactDeployedInGatewayURL(getBaseUrl(), apiName, apiVersion, tenant.getDomain());
+        String url = Utils.getAPIArtifactDeployedInGatewayURL(getBaseUrl(), apiName, apiVersion, tenantDomain);
 
         String encodedCredentials = DatatypeConverter.printBase64Binary(
                 (tenantAdmin.getUserName() + ':' + tenantAdmin.getPassword()).getBytes(StandardCharsets.UTF_8));
@@ -689,7 +802,7 @@ public class BaseSteps {
                 response = SimpleHTTPClient.getInstance().doGet(url, headers);
             } catch (IOException ignored) {
                 log.warn("API :" + apiName + " with version: " + apiVersion + " not yet deployed in tenant: " +
-                        tenant.getDomain());
+                        tenantDomain);
             }
             if (response != null && response.getResponseCode() == 200) {
                     isApiDeployed = true;
@@ -697,7 +810,7 @@ public class BaseSteps {
             }
             try {
                 log.info("Wait for availability of API: " + apiName + " with version: " + apiVersion +
-                        " in tenant " + tenant.getDomain());
+                        " in tenant " + tenantDomain);
                 Thread.sleep(500);
             } catch (InterruptedException ignored) {
             }
@@ -718,9 +831,12 @@ public class BaseSteps {
 
         String apiName  = Utils.extractValueFromPayload(actualApiDetailsPayload, "name").toString();
         String apiVersion = Utils.extractValueFromPayload(actualApiDetailsPayload, "version").toString();
-        User tenantAdmin = tenant.getTenantAdmin();
+        // Use the tenant ADMIN (not the acting actor) — the gateway-artifact admin endpoint requires admin
+        // credentials, which a least-privilege publisher actor does not have.
+        User tenantAdmin = Identity.actingTenantAdmin();
+        String tenantDomain = tenantAdmin.getUserDomain();
 
-        String url = Utils.getAPIArtifactDeployedInGatewayURL(getBaseUrl(), apiName, apiVersion, tenant.getDomain());
+        String url = Utils.getAPIArtifactDeployedInGatewayURL(getBaseUrl(), apiName, apiVersion, tenantDomain);
 
         String encodedCredentials = DatatypeConverter.printBase64Binary(
                 (tenantAdmin.getUserName() + ':' + tenantAdmin.getPassword()).getBytes(StandardCharsets.UTF_8));
@@ -741,7 +857,7 @@ public class BaseSteps {
             }
             try {
                 log.info("Wait for undeployment of API: " + apiName + " with version: " + apiVersion +
-                        " in tenant " + tenant.getDomain());
+                        " in tenant " + tenantDomain);
                 Thread.sleep(500);
             } catch (InterruptedException ignored) {
             }
