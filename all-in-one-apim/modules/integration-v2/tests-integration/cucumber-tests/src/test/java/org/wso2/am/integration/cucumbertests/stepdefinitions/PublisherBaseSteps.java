@@ -1596,10 +1596,17 @@ public class PublisherBaseSteps {
                 throw new FileNotFoundException("Additional properties file not found: " + additionalData);
             }
 
+            // The additional-properties file carries the created API's name/context, so resolve any
+            // ${UNIQUE:...} placeholders here (this file is uploaded as-is, not routed through the
+            // context-payload steps) to keep every imported API unique-named across parallel runs.
+            String additionalProperties = Utils.resolvePayloadPlaceholders(
+                    IOUtils.toString(inputStream, StandardCharsets.UTF_8));
+
             // Create temporary file object
             additionalPropertiesFile = File.createTempFile("data", ".json");
             additionalPropertiesFile.deleteOnExit();
-            Files.copy(inputStream, additionalPropertiesFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            Files.write(additionalPropertiesFile.toPath(),
+                    additionalProperties.getBytes(StandardCharsets.UTF_8));
         }
 
 

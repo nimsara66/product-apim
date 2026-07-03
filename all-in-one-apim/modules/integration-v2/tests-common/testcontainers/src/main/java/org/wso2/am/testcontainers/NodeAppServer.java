@@ -20,6 +20,7 @@ package org.wso2.am.testcontainers;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
 
 import java.time.Duration;
@@ -52,6 +53,27 @@ public class NodeAppServer {
 
     public static NodeAppServer getInstance() {
         return NodeAppServer.InstanceHolder.instance;
+    }
+
+    /**
+     * Connects this backend to an additional {@code network} with alias {@code nodebackend}, so a
+     * distributed cluster's gateway (which lives on its own per-cluster network) can reach the shared
+     * backend at {@code nodebackend} without the gateway being multi-homed. Idempotent-safe: a repeated
+     * connect for the same network is caught and ignored.
+     */
+    public void connectToNetwork(Network network) {
+        try {
+            container.getDockerClient().connectToNetworkCmd()
+                    .withContainerId(container.getContainerId())
+                    .withNetworkId(network.getId())
+                    .withContainerNetwork(new com.github.dockerjava.api.model.ContainerNetwork()
+                            .withAliases("nodebackend"))
+                    .exec();
+            logger.info("NodeAppServer connected to cluster network with alias 'nodebackend'");
+        } catch (Exception e) {
+            logger.warn("Could not connect NodeAppServer to cluster network (may already be connected): "
+                    + e.getMessage());
+        }
     }
 
     public void restart() {

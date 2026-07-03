@@ -53,6 +53,19 @@ public class APIInvocationSteps {
     }
 
     /**
+     * Deadline for the "until response status code becomes N within S seconds" polls. Floors at the global
+     * deployment window (a freshly published API takes a moment to route), then, in the DISTRIBUTED lane,
+     * multiplies it: state that must reflect at the gateway via the event hub — token revocation, cache
+     * invalidation, subscription block/unblock — propagates ACROSS nodes there, so those negative/toggle
+     * assertions ("becomes 401/403") need more headroom than the in-process all-in-one lane. The happy path
+     * is unaffected (the poll returns as soon as the expected status is seen).
+     */
+    private static long propagationDeadlineMillis(int timeoutSeconds) {
+        long base = Math.max(timeoutSeconds * 1000L, Constants.DEPLOYMENT_WAIT_TIME);
+        return "distributed".equalsIgnoreCase(System.getProperty("apim.topology")) ? base * 3 : base;
+    }
+
+    /**
      * Invokes a deployed API using an access token, addressing it by its full gateway context path (the
      * {@code context} field returned by the Publisher API, which already carries the {@code /t/<tenant>}
      * prefix for tenant APIs) — so no tenant prefix is added here. Use this when the path was captured from
@@ -66,7 +79,7 @@ public class APIInvocationSteps {
         // Never wait less than the global deployment window: a freshly published API's gateway route can take
         // longer than a short per-step value to become routable, especially under load. The feature's value
         // can still request MORE than the floor.
-        long deadlineMillis = Math.max(timeoutSeconds * 1000L, Constants.DEPLOYMENT_WAIT_TIME);
+        long deadlineMillis = propagationDeadlineMillis(timeoutSeconds);
         long endTime = System.currentTimeMillis() + deadlineMillis;
         do {
             try {
@@ -95,7 +108,7 @@ public class APIInvocationSteps {
                                                       int timeoutSeconds) throws Exception {
 
         String resolvedContext = Utils.resolveContextPlaceholders(context);
-        long deadlineMillis = Math.max(timeoutSeconds * 1000L, Constants.DEPLOYMENT_WAIT_TIME);
+        long deadlineMillis = propagationDeadlineMillis(timeoutSeconds);
         long endTime = System.currentTimeMillis() + deadlineMillis;
         do {
             try {
@@ -224,7 +237,7 @@ public class APIInvocationSteps {
         // Never wait less than the global deployment window: a freshly published API's gateway route can take
         // longer than a short per-step value to become routable, especially under load. The feature's value
         // can still request MORE than the floor.
-        long deadlineMillis = Math.max(timeoutSeconds * 1000L, Constants.DEPLOYMENT_WAIT_TIME);
+        long deadlineMillis = propagationDeadlineMillis(timeoutSeconds);
         long endTime = System.currentTimeMillis() + deadlineMillis;
         do {
             try {
@@ -284,7 +297,7 @@ public class APIInvocationSteps {
         // Never wait less than the global deployment window: a freshly published API's gateway route can take
         // longer than a short per-step value to become routable, especially under load. The feature's value
         // can still request MORE than the floor.
-        long deadlineMillis = Math.max(timeoutSeconds * 1000L, Constants.DEPLOYMENT_WAIT_TIME);
+        long deadlineMillis = propagationDeadlineMillis(timeoutSeconds);
         long endTime = System.currentTimeMillis() + deadlineMillis;
         do {
             try {
@@ -320,7 +333,7 @@ public class APIInvocationSteps {
         // Never wait less than the global deployment window: a freshly published API's gateway route can take
         // longer than a short per-step value to become routable, especially under load. The feature's value
         // can still request MORE than the floor.
-        long deadlineMillis = Math.max(timeoutSeconds * 1000L, Constants.DEPLOYMENT_WAIT_TIME);
+        long deadlineMillis = propagationDeadlineMillis(timeoutSeconds);
         long endTime = System.currentTimeMillis() + deadlineMillis;
         do {
             try {

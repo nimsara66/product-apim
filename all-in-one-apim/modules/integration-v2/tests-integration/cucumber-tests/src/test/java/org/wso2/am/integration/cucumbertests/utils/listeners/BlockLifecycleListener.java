@@ -23,14 +23,19 @@ import org.jaxen.JaxenException;
 import org.testng.ITestContext;
 import org.testng.ITestListener;
 import org.testng.xml.XmlTest;
+import org.wso2.am.integration.cucumbertests.utils.DistributedClusterConfig;
+import org.wso2.am.integration.cucumbertests.utils.DistributedDbScripts;
 import org.wso2.am.integration.cucumbertests.utils.ModulePathResolver;
 import org.wso2.am.integration.cucumbertests.utils.ServerReadiness;
 import org.wso2.am.integration.cucumbertests.utils.TenantUserProvisioner;
 import org.wso2.am.integration.cucumbertests.utils.TestContext;
 import org.wso2.am.integration.cucumbertests.utils.Utils;
+import org.wso2.am.integration.cucumbertests.utils.clients.SimpleHTTPClient;
 import org.wso2.am.integration.test.utils.Constants;
+import org.wso2.am.testcontainers.DistributedApimCluster;
 import org.wso2.am.testcontainers.DynamicApimContainer;
 import org.wso2.am.testcontainers.NodeAppServer;
+import org.wso2.carbon.automation.test.utils.http.client.HttpResponse;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,6 +64,21 @@ public class BlockLifecycleListener implements ITestListener {
     static final String CONTAINER_KEY = "blockApimContainer";
     static final String BASE_URL_KEY = "baseUrl";
     static final String BASE_GATEWAY_URL_KEY = "baseGatewayUrl";
+    /**
+     * Base URL of the node serving the gateway management webapp ({@code api/am/gateway/v2/*}). All-in-one:
+     * equals {@code baseUrl}. Distributed: the Gateway node's mapped 9443. Consumed by {@code BaseSteps
+     * .getGatewayMgmtUrl()} and this listener's readiness gate.
+     */
+    static final String GATEWAY_MGMT_URL_KEY = "gatewayMgmtUrl";
+
+    /**
+     * Topology selector (system property {@code apim.topology}): {@code allinone} (default) boots a single
+     * {@link DynamicApimContainer}; {@code distributed} boots a {@link DistributedApimCluster} (ACP + GW + TM
+     * + shared MySQL). The published TestContext keys are identical either way, so step definitions are
+     * topology-agnostic.
+     */
+    static final String TOPOLOGY_PROPERTY = "apim.topology";
+    static final String TOPOLOGY_DISTRIBUTED = "distributed";
 
     /** Optional {@code <parameter>} names read from the block's {@code <test>}. */
     static final String PARAM_BLOCK_LABEL = "blockLabel";
@@ -103,23 +123,66 @@ public class BlockLifecycleListener implements ITestListener {
                 logger.info("Block '" + label + "' ensured NodeAppServer backend is running");
             }
 
-            DynamicApimContainer container = new DynamicApimContainer(label, resolveTomlContent(context));
-            container.withLabel("block", label);
-            container.start();
+            String baseUrl;
+            String gatewayUrl;
+            String gatewayMgmtUrl;
+            Object stopHandle;
 
-            String baseUrl = container.getServletHttpsUrl();
-            String gatewayUrl = container.getGatewayHttpsUrl();
-            if (!ServerReadiness.awaitReady(baseUrl)) {
-                container.stop();
-                throw new IllegalStateException("APIM block '" + label + "' did not become ready within "
-                        + (Constants.SERVER_STARTUP_WAIT_TIME / 1000) + "s");
+            if (TOPOLOGY_DISTRIBUTED.equalsIgnoreCase(System.getProperty(TOPOLOGY_PROPERTY))) {
+                // Distributed lane: boot a 4-container cluster (ACP + GW + TM + shared MySQL) from role
+                // overlays merged onto the component distribution configs.
+                String moduleDir = ModulePathResolver.getModuleDir(BlockLifecycleListener.class);
+                // A block's feature overlay (tomlExtraOverlayPath) is layered onto each component (see
+                // DistributedClusterConfig.resolve) — mirrors the all-in-one extra-overlay merge.
+                DistributedClusterConfig.Tomls tomls = DistributedClusterConfig.resolve(
+                        moduleDir, param(context, PARAM_TOML_EXTRA_OVERLAY));
+                // Product DDL for the shared MySQL, read from the built distribution (no stored copy).
+                DistributedDbScripts.Ddl ddl = DistributedDbScripts.resolve(moduleDir);
+                DistributedApimCluster cluster = new DistributedApimCluster(
+                        label, tomls.acp, tomls.tm, tomls.gw, ddl.shared, ddl.apim);
+                cluster.start();
+
+                // Gateway-invocation blocks: attach the shared backend to this cluster's network so the GW
+                // resolves "nodebackend" (the GW stays single-homed — see NodeAppServer.connectToNetwork).
+                if (Boolean.parseBoolean(param(context, PARAM_INIT_BACKEND))) {
+                    NodeAppServer.getInstance().connectToNetwork(cluster.getNetwork());
+                }
+
+                baseUrl = cluster.getServletHttpsUrl();
+                gatewayUrl = cluster.getGatewayHttpsUrl();
+                // The gateway management webapp lives on the GW node, not the ACP servlet.
+                gatewayMgmtUrl = cluster.getGatewayMgmtHttpsUrl();
+                stopHandle = cluster;
+
+                // Ready = GW management health-check 200 (on the GW node) AND the ACP servlet plane up.
+                if (!ServerReadiness.awaitReady(gatewayMgmtUrl) || !awaitControlPlaneReady(baseUrl)) {
+                    cluster.stop();
+                    throw new IllegalStateException("Distributed APIM block '" + label + "' did not become "
+                            + "ready within " + (Constants.SERVER_STARTUP_WAIT_TIME / 1000) + "s");
+                }
+            } else {
+                // All-in-one lane (default): a single container serves both planes on one node.
+                DynamicApimContainer container = new DynamicApimContainer(label, resolveTomlContent(context));
+                container.withLabel("block", label);
+                container.start();
+
+                baseUrl = container.getServletHttpsUrl();
+                gatewayUrl = container.getGatewayHttpsUrl();
+                gatewayMgmtUrl = baseUrl; // gateway webapp shares the servlet node
+                stopHandle = container;
+                if (!ServerReadiness.awaitReady(baseUrl)) {
+                    container.stop();
+                    throw new IllegalStateException("APIM block '" + label + "' did not become ready within "
+                            + (Constants.SERVER_STARTUP_WAIT_TIME / 1000) + "s");
+                }
             }
 
-            TestContext.setShared(CONTAINER_KEY, container);
+            TestContext.setShared(CONTAINER_KEY, stopHandle);
             TestContext.setShared(BASE_URL_KEY, baseUrl);
             TestContext.setShared(BASE_GATEWAY_URL_KEY, gatewayUrl);
+            TestContext.setShared(GATEWAY_MGMT_URL_KEY, gatewayMgmtUrl);
             logger.info("Block '" + label + "' booted and ready: baseUrl=" + baseUrl
-                    + " baseGatewayUrl=" + gatewayUrl);
+                    + " baseGatewayUrl=" + gatewayUrl + " gatewayMgmtUrl=" + gatewayMgmtUrl);
 
             if (Boolean.parseBoolean(param(context, PARAM_INIT_TENANT_USERS))) {
                 provisionTenantUsers(label, param(context, PARAM_TENANT_SET));
@@ -147,11 +210,42 @@ public class BlockLifecycleListener implements ITestListener {
                 container.stop();
                 logger.info("Block '" + context.getName()
                         + "' container stopped; dynamic host ports released by Docker");
+            } else if (stored instanceof DistributedApimCluster cluster) {
+                cluster.stop();
+                logger.info("Block '" + context.getName()
+                        + "' distributed cluster stopped; per-cluster network + host ports released");
             }
         } finally {
             TestContext.clear();
             TestContext.clearScope();
         }
+    }
+
+    /**
+     * Control-plane readiness for the distributed lane: polls the ACP servlet's {@code services/Version}
+     * until 200, so the block does not proceed to tenant/user provisioning or publisher calls before the
+     * ACP webapps are actually serving (the GW health-check alone attests only the Gateway node).
+     */
+    private boolean awaitControlPlaneReady(String baseUrl) {
+        String url = baseUrl + "services/Version";
+        long deadline = System.currentTimeMillis() + Constants.SERVER_STARTUP_WAIT_TIME;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                HttpResponse response = SimpleHTTPClient.getInstance().doGet(url, null);
+                if (response != null && response.getResponseCode() == 200) {
+                    return true;
+                }
+            } catch (Exception ignored) {
+                // ACP not serving yet
+            }
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
     }
 
     /**

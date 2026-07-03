@@ -201,7 +201,41 @@ distribution defaults. Only reach for an overlay when a feature genuinely needs 
   `thread-count=1` so no sibling class shares the container mid-restart — but it can still run as one of the
   parallel *blocks*).
 
+## 14. Topology: all-in-one (default) vs distributed (opt-in)
+The lane runs against one of two server **topologies**, chosen at runtime by the `apim.topology` system
+property. **Default is `allinone`** — a single `DynamicApimContainer` (control plane + gateway + traffic
+manager + DB in one node), exactly as before. Setting **`-Dapim.topology=distributed`** instead boots a
+`DistributedApimCluster`: four containers on a per-cluster Docker network — **API Control Plane (ACP)** +
+**Universal Gateway** + **Traffic Manager** + a shared **MySQL** — the true distributed deployment.
+
+- **You write tests the same way for both.** `BlockLifecycleListener` publishes the *same* TestContext keys
+  either way (`baseUrl`, `baseGatewayUrl`), so step definitions are **topology-agnostic** — never branch on
+  topology in a step or feature. (It also publishes `gatewayMgmtUrl`: in all-in-one it equals `baseUrl`; in
+  distributed it's the GW node's management URL, where the `api/am/gateway/v2/*` health-check and
+  artifact-deployed endpoints live. `BaseSteps.getGatewayMgmtUrl()` already routes those polls correctly —
+  use it, not `getBaseUrl()`, for gateway-webapp calls.)
+- **`testng-v2.xml` is never edited for topology** — it's the unchanged all-in-one contract. The distributed
+  lane is selected purely by the `-Dapim.topology=distributed` flag (a `testng-v2-dist-full-tp1.xml` copy
+  exists only to run the suite sequentially at TP=1; per-block distributed smokes are `testng-v2-dist-*.xml`).
+- **Config:** distributed component wiring is small role overlays in
+  `artifacts/configFiles/distributed/{acp,tm,gw}.toml`, merged onto each component's product distribution
+  `deployment.toml` by `utils/DistributedClusterConfig` (a block's `tomlExtraOverlayPath` is layered on top,
+  applied to all three components). All nodes share one MySQL + one `[encryption]` key. The shared MySQL's
+  product DDL is not stored in the framework either — `utils/DistributedDbScripts` reads `dbscripts/mysql.sql`
+  and `dbscripts/apimgt/mysql.sql` straight from the built ACP distribution zip (only our
+  DB-create/`latin1_bin`-collation script + `my.cnf` are bundled resources).
+- **Running it** (from `.../modules/integration-v2`): build the three component images once via the
+  testcontainers `distributed` Maven profile, install the module with `-Dexec.skip=true`, then
+  `mvn -o test -pl tests-integration/cucumber-tests -Dapim.topology=distributed -Dsurefire.suite.xml=<suite>`.
+  Full recipe + findings: `../../docs/devs/distributed-apim-implementation-plan.md`.
+- **Propagation is slower distributed** (revocation/cache-invalidation/block state cross nodes via the event
+  hub). The `until response status code becomes N within S` invoke steps already apply a ×3 wait multiplier
+  when `apim.topology=distributed`, so keep using those `until … within …` variants for any assertion that
+  depends on gateway-side state changing — never a bare invoke+assert.
+
 ## Anti-patterns (don't)
 Fixed ports · hardcoded resource names · `Thread.sleep` · depending on another scenario's order or
 artifacts · shared mutable static state · cleanup in inline scenarios instead of hooks · duplicate
-steps or duplicate tests · full-file `tomlOverlayPath` for product tests (use `tomlExtraOverlayPath`).
+steps or duplicate tests · full-file `tomlOverlayPath` for product tests (use `tomlExtraOverlayPath`) ·
+branching on `apim.topology` in a step/feature (the published TestContext keys are identical — stay
+topology-agnostic).

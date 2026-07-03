@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!--
+  Focused repro of the remaining distributed failure: the blocked-subscription scenario returns HTTP 401
+  distributed vs 403 all-in-one. Runs ONLY GatewaySecurityEnforcementRunner (the failing runner), in the
+  gateway block config. Run distributed (-Dapim.topology=distributed) to see it FAIL (401); run without
+  that flag (all-in-one default) to see it PASS (403).
+-->
+<suite name="Integration Tests v2 (security-enforcement repro)" parallel="tests" thread-count="1">
+    <listeners>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockLifecycleListener"/>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockScopeListener"/>
+    </listeners>
+    <test name="IntegrationV2-Gateway" parallel="classes" thread-count="1">
+        <parameter name="blockLabel" value="gateway"/>
+        <parameter name="initTenantUsers" value="true"/>
+        <parameter name="initBackend" value="true"/>
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewaySecurityEnforcementRunner"/>
+        </classes>
+    </test>
+</suite>

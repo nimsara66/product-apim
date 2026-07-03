@@ -70,7 +70,11 @@ public class ServerLifecycleSteps {
         Assert.assertTrue(response.getData().contains("true"),
                 "ServerAdmin restartGracefully did not return true: " + response.getData());
 
-        boolean restarted = ServerReadiness.awaitRestart(baseUrl);
+        // Await the restart via the restarted node's OWN readiness endpoint (the servlet's services/Version).
+        // In the distributed lane baseUrl is the ACP (control plane) being restarted; the gateway health-check
+        // used by the no-arg awaitRestart lives on the GW node, so it would never reflect this restart. In the
+        // all-in-one lane it is the same node, so services/Version is an equally valid DOWN->UP signal.
+        boolean restarted = ServerReadiness.awaitRestartAt(baseUrl + "services/Version");
         Assert.assertTrue(restarted, "APIM server did not come back ready within "
                 + (Constants.SERVER_STARTUP_WAIT_TIME / 1000) + "s after a graceful restart");
     }

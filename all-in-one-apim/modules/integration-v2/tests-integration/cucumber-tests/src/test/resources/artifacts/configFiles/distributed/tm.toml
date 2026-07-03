@@ -1,0 +1,27 @@
+# Distributed lane — Traffic Manager role OVERLAY.
+# Merged onto traffic-manager/modules/distribution/product/src/main/conf/deployment.toml.
+# Adds the shared DB + subscribes to the ACP event hub.
+
+[server]
+hostname = "trafficmanager"
+
+[database.apim_db]
+type = "mysql"
+url = "jdbc:mysql://mysql:3306/WSO2AM_DB?autoReconnect=true&amp;allowPublicKeyRetrieval=true&amp;useSSL=false"
+username = "wso2carbon"
+password = "wso2carbon"
+driver = "com.mysql.cj.jdbc.Driver"
+
+[database.shared_db]
+type = "mysql"
+url = "jdbc:mysql://mysql:3306/WSO2AM_SHARED_DB?autoReconnect=true&amp;allowPublicKeyRetrieval=true&amp;useSSL=false"
+username = "wso2carbon"
+password = "wso2carbon"
+driver = "com.mysql.cj.jdbc.Driver"
+
+[apim.event_hub]
+enable = true
+username = "$ref{super_admin.username}"
+password = "$ref{super_admin.password}"
+service_url = "https://acp:9443/services/"
+event_listening_endpoints = ["tcp://acp:5672"]

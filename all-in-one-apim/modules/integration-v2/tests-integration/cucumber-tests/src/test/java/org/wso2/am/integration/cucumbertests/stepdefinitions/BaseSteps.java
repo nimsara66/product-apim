@@ -62,6 +62,18 @@ public class BaseSteps {
     }
 
     /**
+     * Base URL of the node serving the gateway MANAGEMENT webapp ({@code api/am/gateway/v2/*} —
+     * server-startup-healthcheck, api-artifact). In the all-in-one lane this shares the servlet node, so it
+     * falls back to {@link #getBaseUrl()}; in the distributed lane the block publishes {@code gatewayMgmtUrl}
+     * pointing at the Gateway node (its 9443), which is where that webapp actually lives.
+     */
+    protected String getGatewayMgmtUrl() {
+
+        Object v = TestContext.get("gatewayMgmtUrl");
+        return v != null ? v.toString() : getBaseUrl();
+    }
+
+    /**
      * Readiness assertion only. Server boot/readiness is the block lifecycle listener's job, so this step
      * no longer caches any "current" tenant/user — it simply confirms the block published a baseUrl. Kept
      * so existing feature prose ("Given The system is ready") still resolves; carries no ordering contract.
@@ -763,7 +775,7 @@ public class BaseSteps {
     @Then("I wait for the APIM server to be ready")
     public void waitForAPIMServerToBeReady() {
 
-        boolean isServerReady = ServerReadiness.awaitReady(getBaseUrl());
+        boolean isServerReady = ServerReadiness.awaitReady(getGatewayMgmtUrl());
         Assert.assertTrue(isServerReady, "APIM server is not ready even after waiting for " +
                 Constants.DEPLOYMENT_WAIT_TIME /60000 + " minutes");
     }
@@ -785,7 +797,7 @@ public class BaseSteps {
         User tenantAdmin = Identity.actingTenantAdmin();
         String tenantDomain = tenantAdmin.getUserDomain();
 
-        String url = Utils.getAPIArtifactDeployedInGatewayURL(getBaseUrl(), apiName, apiVersion, tenantDomain);
+        String url = Utils.getAPIArtifactDeployedInGatewayURL(getGatewayMgmtUrl(), apiName, apiVersion, tenantDomain);
 
         String encodedCredentials = DatatypeConverter.printBase64Binary(
                 (tenantAdmin.getUserName() + ':' + tenantAdmin.getPassword()).getBytes(StandardCharsets.UTF_8));
@@ -836,7 +848,7 @@ public class BaseSteps {
         User tenantAdmin = Identity.actingTenantAdmin();
         String tenantDomain = tenantAdmin.getUserDomain();
 
-        String url = Utils.getAPIArtifactDeployedInGatewayURL(getBaseUrl(), apiName, apiVersion, tenantDomain);
+        String url = Utils.getAPIArtifactDeployedInGatewayURL(getGatewayMgmtUrl(), apiName, apiVersion, tenantDomain);
 
         String encodedCredentials = DatatypeConverter.printBase64Binary(
                 (tenantAdmin.getUserName() + ':' + tenantAdmin.getPassword()).getBytes(StandardCharsets.UTF_8));

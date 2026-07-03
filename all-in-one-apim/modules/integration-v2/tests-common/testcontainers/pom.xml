@@ -126,4 +126,73 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            Distributed lane (Phase 2 / T2.1): build the three component images
+            (wso2am-acp / wso2am-tm / wso2am-universal-gw) from the api-control-plane,
+            traffic-manager and gateway zips, each with the MySQL JDBC connector overlaid.
+            Opt-in only ('mvn ... -Pdistributed'); the default all-in-one lane is unaffected.
+            The component zips must already be built (their reactors run before this module,
+            mirroring how the all-in-one dist zip is pre-staged today).
+        -->
+        <profile>
+            <id>distributed</id>
+            <build>
+                <plugins>
+                    <!-- Stage the MySQL JDBC connector (packs do not bundle it) for the overlay build. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <version>3.6.1</version>
+                        <executions>
+                            <execution>
+                                <id>stage-mysql-connector</id>
+                                <phase>process-resources</phase>
+                                <goals>
+                                    <goal>copy</goal>
+                                </goals>
+                                <configuration>
+                                    <artifactItems>
+                                        <artifactItem>
+                                            <groupId>com.mysql</groupId>
+                                            <artifactId>mysql-connector-j</artifactId>
+                                            <version>${mysql.connector.version}</version>
+                                            <outputDirectory>${project.build.directory}</outputDirectory>
+                                            <destFileName>mysql-connector-j-${mysql.connector.version}.jar</destFileName>
+                                        </artifactItem>
+                                    </artifactItems>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- Build the three component images from the docker-apim #master Dockerfiles. -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <execution>
+                                <id>build-distributed-docker-images</id>
+                                <phase>pre-integration-test</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>bash</executable>
+                                    <arguments>
+                                        <argument>${project.basedir}/src/main/resources/scripts/build-distributed-images.sh</argument>
+                                        <argument>${project.basedir}</argument>
+                                        <argument>${apim.server.version}</argument>
+                                        <argument>${project.build.directory}/mysql-connector-j-${mysql.connector.version}.jar</argument>
+                                        <argument>${docker.extra.hosts}</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

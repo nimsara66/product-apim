@@ -70,6 +70,17 @@
         <!--Node app servers docker image-->
         <node.docker.image.name>node-app-server:latest</node.docker.image.name>
 
+        <!-- Distributed-lane component docker images (Phase 2). Built by the testcontainers
+             'distributed' profile from the api-control-plane / traffic-manager / gateway zips. -->
+        <acp.docker.image.name>wso2am-acp:${apim.server.version}-jdk21</acp.docker.image.name>
+        <tm.docker.image.name>wso2am-tm:${apim.server.version}-jdk21</tm.docker.image.name>
+        <gw.docker.image.name>wso2am-universal-gw:${apim.server.version}-jdk21</gw.docker.image.name>
+        <!-- Shared MySQL image + JDBC connector for the distributed lane (packs do not bundle the driver). -->
+        <mysql.docker.image.name>mysql:8.4.0-oraclelinux8</mysql.docker.image.name>
+        <mysql.connector.version>8.4.0</mysql.connector.version>
+        <!-- Topology selector: 'allinone' (default) or 'distributed'. Override with -Dapim.topology=distributed. -->
+        <apim.topology>allinone</apim.topology>
+
         <!-- Debug API Manager instance-->
         <apim.debug.enabled>False</apim.debug.enabled>
         <apim.debug.port>5006</apim.debug.port>
@@ -171,6 +182,11 @@
                                 <apim.server.name>${apim.server.name}</apim.server.name>
                                 <apim.docker.image.name>${apim.docker.image.name}</apim.docker.image.name>
                                 <node.docker.image.name>${node.docker.image.name}</node.docker.image.name>
+                                <acp.docker.image.name>${acp.docker.image.name}</acp.docker.image.name>
+                                <tm.docker.image.name>${tm.docker.image.name}</tm.docker.image.name>
+                                <gw.docker.image.name>${gw.docker.image.name}</gw.docker.image.name>
+                                <mysql.docker.image.name>${mysql.docker.image.name}</mysql.docker.image.name>
+                                <apim.topology>${apim.topology}</apim.topology>
                                 <apim.debug.enabled>${apim.debug.enabled}</apim.debug.enabled>
                                 <apim.debug.port>${apim.debug.port}</apim.debug.port>
                                 <active.profile>migration</active.profile>
@@ -234,6 +250,11 @@
                                 <apim.server.name>${apim.server.name}</apim.server.name>
                                 <apim.docker.image.name>${apim.docker.image.name}</apim.docker.image.name>
                                 <node.docker.image.name>${node.docker.image.name}</node.docker.image.name>
+                                <acp.docker.image.name>${acp.docker.image.name}</acp.docker.image.name>
+                                <tm.docker.image.name>${tm.docker.image.name}</tm.docker.image.name>
+                                <gw.docker.image.name>${gw.docker.image.name}</gw.docker.image.name>
+                                <mysql.docker.image.name>${mysql.docker.image.name}</mysql.docker.image.name>
+                                <apim.topology>${apim.topology}</apim.topology>
                                 <apim.debug.enabled>${apim.debug.enabled}</apim.debug.enabled>
                                 <apim.debug.port>${apim.debug.port}</apim.debug.port>
                                 <active.profile>default</active.profile>

@@ -93,17 +93,48 @@ public final class ServerReadiness {
      * @return {@code true} if the server was observed going down and then becoming ready again
      */
     public static boolean awaitRestart(String baseUrl) {
-        if (!awaitUnready(baseUrl, Constants.SERVER_STARTUP_WAIT_TIME)) {
+        return awaitRestartAt(Utils.getGatewayHealthCheckURL(baseUrl));
+    }
+
+    /**
+     * Like {@link #awaitRestart(String)} but polls an explicit readiness URL through the DOWN→UP transition.
+     * The distributed lane uses this with the restarted node's OWN endpoint (the ACP servlet's
+     * {@code services/Version}), because the gateway health-check the no-arg variant polls lives on a
+     * DIFFERENT node (the GW) in a distributed deployment and so never reflects the ACP's restart.
+     */
+    public static boolean awaitRestartAt(String readinessUrl) {
+        if (!awaitUnready(readinessUrl, Constants.SERVER_STARTUP_WAIT_TIME)) {
             logger.error("APIM server did not go down after the restart request; restart may not have taken effect");
             return false;
         }
         logger.info("APIM server went down for restart; waiting for it to come back up...");
-        return awaitReady(baseUrl, Constants.SERVER_STARTUP_WAIT_TIME);
+        return awaitReadyAt(readinessUrl, Constants.SERVER_STARTUP_WAIT_TIME);
     }
 
-    /** Polls the health-check until it is NOT 200 (or the port is closed), i.e. the server has gone down. */
-    private static boolean awaitUnready(String baseUrl, long timeoutMillis) {
-        String url = Utils.getGatewayHealthCheckURL(baseUrl);
+    /** Polls an explicit URL until it returns 200 or the timeout elapses. */
+    private static boolean awaitReadyAt(String url, long timeoutMillis) {
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                HttpResponse response = SimpleHTTPClient.getInstance().doGet(url, null);
+                if (response != null && response.getResponseCode() == 200) {
+                    return true;
+                }
+            } catch (Exception ignored) {
+                // not ready yet
+            }
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /** Polls the given URL until it is NOT 200 (or the port is closed), i.e. the server has gone down. */
+    private static boolean awaitUnready(String url, long timeoutMillis) {
         long deadline = System.currentTimeMillis() + timeoutMillis;
         while (System.currentTimeMillis() < deadline) {
             try {

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!--
+  Phase 3 (T3.1) verification lane: exercises the DistributedMysqlContainer helper in isolation
+  (shared MySQL for the distributed-APIM cluster). No server-flow tests, no legacy listeners.
+-->
+<suite name="Framework Verification Distributed-MySQL" parallel="false">
+    <test name="Phase3-DistributedMysql">
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.verification.DistributedMysqlContainerVerificationTest"/>
+        </classes>
+    </test>
+</suite>
