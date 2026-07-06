@@ -1,0 +1,44 @@
+# Codecov configuration — TARGET PROJECT: product-apim (standalone), matching the legacy lane.
+#
+# The legacy TestNG lane already uploads its server-side integration coverage to the product-apim Codecov
+# project (flag `integration_tests`, ~9.4% on run 28582084664). v2 does the SAME: the JaCoCo integration
+# report is uploaded to product-apim's own project. No cross-repo upload, no unit merge (product-apim has
+# no unit tests — carbon-apimgt's unit coverage lives in the carbon-apimgt project).
+#
+# PLACEMENT: product-apim repository ROOT (or .github/codecov.yml). Kept here as a reviewed template.
+#
+# Flag naming: v2 uses `integration-v2_tests` so it coexists with (and can be compared against) the legacy
+# `integration_tests` flag in the same project rather than clobbering it.
+
+flags:
+  integration-v2_tests:    # v2 all-in-one Testcontainers lane (JaCoCo, -Dapim.coverage=true) — per-PR, like legacy
+    carryforward: true     # keep last-known coverage on commits/PRs where this job didn't run or was cancelled
+
+# Optional: view coverage sliced by APIM subsystem.
+component_management:
+  individual_components:
+    - component_id: apim_gateway
+      paths: ["**/org/wso2/carbon/apimgt/gateway/**"]
+    - component_id: apim_keymgt
+      paths: ["**/org/wso2/carbon/apimgt/keymgt/**"]
+    - component_id: apim_impl
+      paths: ["**/org/wso2/carbon/apimgt/impl/**"]
+    - component_id: apim_rest_api
+      paths: ["**/org/wso2/carbon/apimgt/rest/api/**"]
+
+coverage:
+  status:
+    project:
+      default:
+        informational: true   # non-blocking; standalone integration % is a floor, not a gate
+    patch:
+      default:
+        informational: true
+
+comment:
+  layout: "reach, diff, flags, components"
+  require_changes: false
+
+# NOTE: if a combined unit+integration number is ever wanted, the alternative is to attribute this
+# integration report to the carbon-apimgt Codecov project instead (where the unit tests live) and let
+# Codecov line-union them per commit. Not done here — v2 matches the legacy product-apim-standalone model.

@@ -81,6 +81,12 @@
         <!-- Topology selector: 'allinone' (default) or 'distributed'. Override with -Dapim.topology=distributed. -->
         <apim.topology>allinone</apim.topology>
 
+        <!-- Integration coverage (opt-in): -Dapim.coverage=true attaches the JaCoCo agent to each block's
+             container and renders a merged report at suite end. -Dapim.coverage.sources=<path> is an optional
+             source tree (e.g. carbon-apimgt) for HTML line detail. Off/empty by default; default runs unaffected. -->
+        <apim.coverage>false</apim.coverage>
+        <apim.coverage.sources></apim.coverage.sources>
+
         <!-- Debug API Manager instance-->
         <apim.debug.enabled>False</apim.debug.enabled>
         <apim.debug.port>5006</apim.debug.port>
@@ -189,6 +195,8 @@
                                 <apim.topology>${apim.topology}</apim.topology>
                                 <apim.debug.enabled>${apim.debug.enabled}</apim.debug.enabled>
                                 <apim.debug.port>${apim.debug.port}</apim.debug.port>
+                                <apim.coverage>${apim.coverage}</apim.coverage>
+                                <apim.coverage.sources>${apim.coverage.sources}</apim.coverage.sources>
                                 <active.profile>migration</active.profile>
                             </systemPropertyVariables>
                             <environmentVariables>
@@ -257,6 +265,8 @@
                                 <apim.topology>${apim.topology}</apim.topology>
                                 <apim.debug.enabled>${apim.debug.enabled}</apim.debug.enabled>
                                 <apim.debug.port>${apim.debug.port}</apim.debug.port>
+                                <apim.coverage>${apim.coverage}</apim.coverage>
+                                <apim.coverage.sources>${apim.coverage.sources}</apim.coverage.sources>
                                 <active.profile>default</active.profile>
                             </systemPropertyVariables>
                             <environmentVariables>

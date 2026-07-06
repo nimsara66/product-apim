@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!--
+  Isolated verification lane for the v2 coverage PoC (Phase 1 spike).
+  Boots one DynamicApimContainer with the JaCoCo agent, dumps coverage, renders a scoped report.
+  Wired to NONE of the legacy listeners, so it cannot affect other runs.
+-->
+<suite name="Framework Verification - Coverage PoC" parallel="false">
+    <test name="Coverage-Spike">
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.verification.JacocoCoverageSpikeVerificationTest"/>
+        </classes>
+    </test>
+</suite>

@@ -23,6 +23,7 @@ import org.jaxen.JaxenException;
 import org.testng.ITestContext;
 import org.testng.ITestListener;
 import org.testng.xml.XmlTest;
+import org.wso2.am.integration.cucumbertests.utils.CoverageSupport;
 import org.wso2.am.integration.cucumbertests.utils.DistributedClusterConfig;
 import org.wso2.am.integration.cucumbertests.utils.DistributedDbScripts;
 import org.wso2.am.integration.cucumbertests.utils.ModulePathResolver;
@@ -34,6 +35,7 @@ import org.wso2.am.integration.cucumbertests.utils.clients.SimpleHTTPClient;
 import org.wso2.am.integration.test.utils.Constants;
 import org.wso2.am.testcontainers.DistributedApimCluster;
 import org.wso2.am.testcontainers.DynamicApimContainer;
+import org.wso2.am.testcontainers.JacocoCoverage;
 import org.wso2.am.testcontainers.NodeAppServer;
 import org.wso2.carbon.automation.test.utils.http.client.HttpResponse;
 
@@ -164,6 +166,10 @@ public class BlockLifecycleListener implements ITestListener {
                 // All-in-one lane (default): a single container serves both planes on one node.
                 DynamicApimContainer container = new DynamicApimContainer(label, resolveTomlContent(context));
                 container.withLabel("block", label);
+                // Opt-in integration coverage: attach the JaCoCo agent before boot (see CoverageSupport).
+                if (CoverageSupport.enabled()) {
+                    container.withCoverage();
+                }
                 container.start();
 
                 baseUrl = container.getServletHttpsUrl();
@@ -207,6 +213,17 @@ public class BlockLifecycleListener implements ITestListener {
         try {
             Object stored = TestContext.get(CONTAINER_KEY);
             if (stored instanceof DynamicApimContainer container) {
+                // Dump JaCoCo counters over the mapped tcpserver port BEFORE stopping (all-in-one lane).
+                // Best-effort: a dump failure must never break teardown or fail the block.
+                if (CoverageSupport.enabled()) {
+                    try {
+                        String moduleDir = ModulePathResolver.getModuleDir(BlockLifecycleListener.class);
+                        JacocoCoverage.dump(container.getCoverageDumpHost(), container.getCoverageDumpPort(),
+                                CoverageSupport.execFile(moduleDir, label));
+                    } catch (Exception e) {
+                        logger.warn("Coverage dump failed for block '" + label + "': " + e.getMessage());
+                    }
+                }
                 container.stop();
                 logger.info("Block '" + context.getName()
                         + "' container stopped; dynamic host ports released by Docker");
