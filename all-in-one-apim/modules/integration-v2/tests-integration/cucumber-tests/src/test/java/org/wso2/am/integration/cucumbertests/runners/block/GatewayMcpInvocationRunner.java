@@ -20,18 +20,18 @@ package org.wso2.am.integration.cucumbertests.runners.block;
 import io.cucumber.testng.CucumberOptions;
 
 /**
- * Runner for gateway MCP-server proxy invocation — ports the proxy-subtype path of MCPServerTestCase against a
- * REAL session-stateful MCP server (official SDK), verifying the gateway proxies the MCP JSON-RPC handshake +
- * session state end-to-end. Runs in a gateway-invoking block (needs the node mcp-server backend).
+ * Runner for gateway-plane MCP tool invocation across all three creation types (proxy / from-OpenAPI /
+ * from-API): the full stateful MCP JSON-RPC handshake, scope enforcement, and subscription throttling.
+ * Runs in a backend-enabled block (needs the node mcp-server backend).
  */
 @CucumberOptions(
         features = {
-                "src/test/resources/features/gateway/mcp_proxy_invocation.feature"
+                "src/test/resources/features/gateway/mcp_invocation.feature"
         },
         glue = {
                 "org.wso2.am.integration.cucumbertests.stepdefinitions"
         },
-        plugin = {"pretty", "html:target/cucumber-report/gateway-mcp-proxy-invocation.html"}
+        plugin = {"pretty", "html:target/cucumber-report/gateway-mcp-invocation.html"}
 )
-public class GatewayMcpProxyInvocationRunner extends BaseBlockRunner {
+public class GatewayMcpInvocationRunner extends BaseBlockRunner {
 }

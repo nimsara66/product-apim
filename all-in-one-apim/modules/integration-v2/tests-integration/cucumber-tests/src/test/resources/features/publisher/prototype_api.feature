@@ -54,7 +54,7 @@ Feature: Prototype API runtime, mock and visibility
       | admin             |
       | admin@tenant1.com |
 
-  @cap:publisher @feat:prototype @type:regression @legacy:PrototypedAPITestcase
+  @cap:publisher @feat:api-lifecycle @rule:prototype @type:regression @legacy:PrototypedAPITestcase
   Scenario Outline: An inline mock implementation script is generated for a prototyped <oasVersion> API as <actor>
     Given The system is ready and I have valid publisher access tokens as "<actor>"
     When I import open api definition from "<apiDefinition>" , additional properties from "<additionalProperty>" and create api as "mockApiId"
@@ -75,7 +75,7 @@ Feature: Prototype API runtime, mock and visibility
       | OAS2       | publisherUser@tenant1.com | artifacts/payloads/OAS/OAS2ApiDefinition.json | artifacts/payloads/OAS/OAS2AdditionalProperties.json |
       | OAS3       | publisherUser@tenant1.com | artifacts/payloads/OAS/OAS3ApiDefinition.json | artifacts/payloads/OAS/OAS3AdditionalProperties.json |
 
-  @cap:devportal @feat:browse @rule:prototype @type:regression @dep:publisher @legacy:APIM23VisibilityOfPrototypedAPIInStoreTestCase
+  @cap:devportal @feat:discovery @rule:prototype @type:regression @dep:publisher @legacy:APIM23VisibilityOfPrototypedAPIInStoreTestCase
   Scenario Outline: A prototyped API is visible in the devportal as <actor>
     Given The system is ready
     And I have valid access tokens as "<actor>"

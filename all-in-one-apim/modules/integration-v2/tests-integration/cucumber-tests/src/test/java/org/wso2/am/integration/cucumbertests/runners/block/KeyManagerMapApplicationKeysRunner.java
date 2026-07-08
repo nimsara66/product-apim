@@ -27,7 +27,7 @@ import io.cucumber.testng.CucumberOptions;
  */
 @CucumberOptions(
         features = {
-                "src/test/resources/features/keymanager/map_application_keys.feature"
+                "src/test/resources/features/key-manager/map_application_keys.feature"
         },
         glue = {
                 "org.wso2.am.integration.cucumbertests.stepdefinitions"

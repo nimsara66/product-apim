@@ -74,9 +74,17 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayGraphqlEndpointSecurityRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.PublisherGraphqlFromUrlRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayAiApiInvocationRunner"/>
-            <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayMcpProxyInvocationRunner"/>
-            <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayMcpOpenApiInvocationRunner"/>
-            <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayMcpApiInvocationRunner"/>
+        </classes>
+    </test>
+    <!-- MCP servers span planes (publisher-plane CRUD + gateway-plane invocation) but share one backend-enabled
+         container: proxy create-validation and tool invocation both call the node mcp-server backend. -->
+    <test name="IntegrationV2-MCP" parallel="classes" thread-count="2">
+        <parameter name="blockLabel" value="mcp"/>
+        <parameter name="initTenantUsers" value="true"/>
+        <parameter name="initBackend" value="true"/>
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.PublisherMcpServersRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayMcpInvocationRunner"/>
         </classes>
     </test>
     <!-- Key-manager features (token/key issuance). initBackend for the refresh/sandbox gateway invocations. -->

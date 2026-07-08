@@ -12,9 +12,8 @@ capabilities:
   publisher:
     name: Publisher — API authoring & lifecycle
     features:
-      api-lifecycle:     { name: Create / deploy / publish / retire / delete }
+      api-lifecycle:     { name: Create / deploy / publish / prototype / retire / delete }
       api-config:        { name: Runtime config, endpoints, custom properties, resources, CORS }
-      prototype:         { name: Prototype APIs & inline mock implementation }
       operation-policies: { name: Operation policy CRUD (common & API-specific) }
       scopes:            { name: API scopes & shared scopes (assignment) }
       versioning:        { name: API versioning & version-copy }
@@ -27,12 +26,12 @@ capabilities:
       streaming-design:  { name: Streaming (WebSocket/WebSub/Async) API design }
       soap-design:       { name: SOAP (passthrough) API design }
       service-catalog:   { name: Service catalog }
+      mcp-servers:       { name: MCP server authoring (create proxy/from-OpenAPI/from-API, CRUD, backends) }
 
   devportal:
     name: DevPortal — discovery & consumption
     features:
-      search:                  { name: Search & discovery }
-      browse:                  { name: Browse / catalog view / tags }
+      discovery:               { name: Search & browse }
       applications:            { name: Application CRUD }
       application-attributes:  { name: Custom application attributes (store + JWT claim) }
       subscribe:               { name: Subscribe / unsubscribe }
@@ -57,13 +56,7 @@ capabilities:
       security-enforcement:   { name: Token / scope / mutual-SSL enforcement }
       custom-auth-header:     { name: Custom authorization header }
       schema-validation:      { name: Request / response schema validation }
-
-  mcp:
-    name: MCP — Model Context Protocol servers
-    features:
-      proxy-invocation:   { name: MCP server (proxy to a third-party MCP server) }
-      openapi-invocation: { name: MCP server generated from an OpenAPI definition }
-      api-invocation:     { name: MCP server generated from an existing API }
+      mcp-invocation:         { name: MCP tool invocation (proxy / from-OpenAPI / from-API) }
 
   admin:
     name: Admin — policies & configuration

@@ -20,18 +20,18 @@ package org.wso2.am.integration.cucumbertests.runners.block;
 import io.cucumber.testng.CucumberOptions;
 
 /**
- * Runner for gateway MCP-server FROM-API invocation — ports the ExistingApi subtype of MCPServerTestCase. An
- * existing API is wrapped as an MCP server; the gateway routes tools/call through that API to its backend. Runs
- * in a gateway-invoking block (needs the node petstore backend).
+ * Runner for publisher-plane MCP server authoring — CRUD + backend-endpoint management across all three
+ * creation types (proxy / from-OpenAPI / from-API). Runs in a backend-enabled block, since proxy
+ * create-validation calls the node mcp-server backend.
  */
 @CucumberOptions(
         features = {
-                "src/test/resources/features/gateway/mcp_api_invocation.feature"
+                "src/test/resources/features/publisher/mcp_servers.feature"
         },
         glue = {
                 "org.wso2.am.integration.cucumbertests.stepdefinitions"
         },
-        plugin = {"pretty", "html:target/cucumber-report/gateway-mcp-api-invocation.html"}
+        plugin = {"pretty", "html:target/cucumber-report/publisher-mcp-servers.html"}
 )
-public class GatewayMcpApiInvocationRunner extends BaseBlockRunner {
+public class PublisherMcpServersRunner extends BaseBlockRunner {
 }

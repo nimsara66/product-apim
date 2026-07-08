@@ -27,7 +27,7 @@ import io.cucumber.testng.CucumberOptions;
  */
 @CucumberOptions(
         features = {
-                "src/test/resources/features/keymanager/multiple_client_secrets.feature"
+                "src/test/resources/features/key-manager/multiple_client_secrets.feature"
         },
         glue = {
                 "org.wso2.am.integration.cucumbertests.stepdefinitions"

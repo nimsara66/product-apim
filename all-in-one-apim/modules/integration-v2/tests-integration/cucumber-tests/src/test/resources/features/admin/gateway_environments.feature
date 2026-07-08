@@ -196,7 +196,7 @@ Feature: Admin Gateway Environments
 
   # E5: an API deployed to a custom environment reflects that environment's vhost in its Developer Portal
   # endpoint URLs. NEW verified coverage (legacy-disabled testValidateDevportalAPIAndSwaggerResponse).
-  @cap:devportal @feat:browse @rule:environment @type:regression @dep:publisher @legacy:EnvironmentTestCase
+  @cap:devportal @feat:discovery @rule:environment @type:regression @dep:publisher @legacy:EnvironmentTestCase
   Scenario Outline: A devportal API reflects the custom environment vhost it is deployed to as <actor>
     Given The system is ready
     And I have valid access tokens as "<actor>"
