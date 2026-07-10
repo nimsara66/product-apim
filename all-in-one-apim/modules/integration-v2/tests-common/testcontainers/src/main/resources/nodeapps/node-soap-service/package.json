@@ -1,0 +1,12 @@
+{
+  "name": "node-soap-service",
+  "version": "1.0.0",
+  "description": "WSDL-backed SOAP service (node-soap) for SOAP/WSDL integration scenarios (WSDL import, SOAP-to-REST, SOAP export/import)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "soap": "^1.0.4"
+  }
+}

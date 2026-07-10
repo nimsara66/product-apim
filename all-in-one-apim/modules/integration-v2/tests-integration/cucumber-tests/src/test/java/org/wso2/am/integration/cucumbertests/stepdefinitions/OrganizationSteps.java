@@ -236,6 +236,46 @@ public class OrganizationSteps {
     }
 
     /**
+     * Sets a super-tenant user-profile claim (RemoteUserStoreManagerService {@code setUserClaimValue}). Populates
+     * a profile claim (e.g. {@code http://wso2.org/claims/mobile}) on a provisioned user so a downstream flow can
+     * assert it surfaces (e.g. in the backend JWT). Both the claim value and the user name resolve {@code {{...}}}.
+     */
+    @When("I set the user claim {string} to {string} for user {string}")
+    public void iSetUserClaim(String claimUri, String claimValue, String username) throws Exception {
+
+        TenantUserProvisioner.setUserClaimValue(Constants.SUPER_TENANT_DOMAIN,
+                Utils.resolveContextPlaceholders(username), claimUri, Utils.resolveContextPlaceholders(claimValue));
+    }
+
+    /**
+     * Configures the OAuth service provider behind a consumer key to REQUEST the standard user-profile claims
+     * (givenname / lastname / mobile / organization), so they surface in the backend JWT. Must run BEFORE the
+     * token is minted. Ports the legacy updateServiceProviderWithRequiredClaims.
+     */
+    @When("I configure the service provider for consumer key {string} to request the user-profile claims")
+    public void iRequestUserProfileClaims(String consumerKeyRef) throws Exception {
+        String ck = Utils.resolveFromContext(consumerKeyRef).toString();
+        TenantUserProvisioner.addRequestedClaimsToServiceProvider(Constants.SUPER_TENANT_DOMAIN, ck,
+                new String[] {"http://wso2.org/claims/givenname", "http://wso2.org/claims/lastname",
+                        "http://wso2.org/claims/mobile", "http://wso2.org/claims/organization"});
+    }
+
+    /**
+     * Registers the custom OIDC external claims (mobile, organization) and binds the profile claims to the
+     * {@code openid} scope, so a token requesting that scope returns them (and they surface in the backend JWT).
+     * Ports the legacy createClaimMapping.
+     */
+    @When("I register the OIDC user-profile claim mappings and scope")
+    public void iRegisterOidcClaims() throws Exception {
+        TenantUserProvisioner.addOidcExternalClaim(Constants.SUPER_TENANT_DOMAIN, "mobile",
+                "http://wso2.org/claims/mobile");
+        TenantUserProvisioner.addOidcExternalClaim(Constants.SUPER_TENANT_DOMAIN, "organization",
+                "http://wso2.org/claims/organization");
+        TenantUserProvisioner.updateOidcScopeClaims(Constants.SUPER_TENANT_DOMAIN, "openid",
+                new String[] {"given_name", "family_name", "mobile", "organization"});
+    }
+
+    /**
      * Sets an API's {@code visibleOrganizations} (GET the publisher API → replace the field → PUT). The value is
      * {@code none}, {@code all}, or an organization UUID (resolves {@code {{...}}}). Uses the acting actor's
      * publisher token. Non-asserting.

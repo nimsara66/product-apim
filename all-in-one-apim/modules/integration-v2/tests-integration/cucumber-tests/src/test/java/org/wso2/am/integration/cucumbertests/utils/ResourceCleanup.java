@@ -82,6 +82,16 @@ public final class ResourceCleanup {
         TestContext.addToList(listKey, new OwnedResource(String.valueOf(id), Identity.actingActorRef()));
     }
 
+    /**
+     * Removes a previously-registered resource from the teardown list — for the case where a test deletes the
+     * resource itself (e.g. an export/delete/import round-trip), so the sweep does not later attempt a redundant
+     * delete of an id that is already gone (which would log a spurious 404 leak WARN).
+     */
+    public static void deregister(String listKey, Object id) {
+        String target = String.valueOf(id);
+        TestContext.getList(listKey).removeIf(o -> o instanceof OwnedResource r && r.id().equals(target));
+    }
+
     /** Deletes all registered applications then APIs from the context's current scope. No-op if no baseUrl. */
     public static void deleteRegisteredResources() {
 

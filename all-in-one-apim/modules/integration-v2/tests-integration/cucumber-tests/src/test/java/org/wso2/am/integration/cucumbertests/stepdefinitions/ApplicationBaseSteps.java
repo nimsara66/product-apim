@@ -57,6 +57,25 @@ public class ApplicationBaseSteps {
      * 
      * @param payload Context key containing the application creation JSON payload
      */
+    /**
+     * Resets an application's throttle counter (DevPortal POST /applications/{id}/reset-throttle-policy with the
+     * owner username), so a throttled application (429) can be invoked again. Ports the reset side of
+     * ApplicationThrottlingResetTestCase.
+     */
+    @When("I reset the application throttle policy for {string} owned by {string}")
+    public void iResetApplicationThrottlePolicy(String appId, String owner) throws IOException {
+        String actualAppId = Utils.resolveFromContext(appId).toString();
+        owner = Utils.resolveContextPlaceholders(owner);
+        Map<String, String> headers = new HashMap<>();
+        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + Identity.devportalToken());
+        String body = "{\"userName\": \"" + owner + "\"}";
+        TestContext.remove("httpResponse");
+        HttpResponse response = SimpleHTTPClient.getInstance().doPost(
+                Utils.getResetThrottlePolicyURL(getBaseUrl(), actualAppId), headers, body,
+                Constants.CONTENT_TYPES.APPLICATION_JSON);
+        TestContext.set("httpResponse", response);
+    }
+
     @When("I create an application with payload {string}")
     public void iCreateAnApplicationWithJsonPayload(String payload) throws IOException {
 
@@ -1250,7 +1269,35 @@ public class ApplicationBaseSteps {
      */
     @Then("The reflected backend JWT should contain application attribute {string} with value {string}")
     public void theReflectedBackendJwtShouldContainAttribute(String attributeName, String attributeValue) {
+        String payload = decodeReflectedBackendJwtPayload();
+        Assert.assertTrue(payload.contains(attributeName),
+                "Decoded backend JWT does not contain attribute name '" + attributeName + "': " + payload);
+        Assert.assertTrue(payload.contains(attributeValue),
+                "Decoded backend JWT does not contain attribute value '" + attributeValue + "': " + payload);
+    }
 
+    /**
+     * General backend-JWT claim assertion: the decoded X-JWT-Assertion reflected by the backend must contain the
+     * given claim name and value (both resolved for {@code {{contextKey}}} refs, so a captured unique app/API name
+     * can be asserted). A substring match on the decoded payload, so a claim name may be given as a short suffix
+     * (e.g. "keytype") rather than the full dialect URL. Ports the claim assertions of JWTTestCase.
+     */
+    @Then("The reflected backend JWT should contain claim {string} with value {string}")
+    public void theReflectedBackendJwtShouldContainClaim(String claimName, String claimValue) {
+        String payload = decodeReflectedBackendJwtPayload();
+        claimName = Utils.resolveContextPlaceholders(claimName);
+        claimValue = Utils.resolveContextPlaceholders(claimValue);
+        Assert.assertTrue(payload.contains(claimName),
+                "Decoded backend JWT does not contain claim '" + claimName + "': " + payload);
+        Assert.assertTrue(payload.contains(claimValue),
+                "Decoded backend JWT claim '" + claimName + "' does not carry value '" + claimValue + "': " + payload);
+    }
+
+    /**
+     * Extracts and base64-decodes the payload segment of the X-JWT-Assertion header the backend reflected back
+     * (via the /reflect-headers route). Shared by the attribute and general-claim assertion steps.
+     */
+    private String decodeReflectedBackendJwtPayload() {
         HttpResponse response = (HttpResponse) TestContext.get("httpResponse");
         Assert.assertNotNull(response, "No invocation response captured");
         JSONObject body = new JSONObject(response.getData());
@@ -1271,17 +1318,11 @@ public class ApplicationBaseSteps {
         Assert.assertTrue(segments.length >= 2, "Malformed JWT assertion (expected >= 2 segments): " + jwt);
         // The gateway emits the assertion base64-encoded (config: encoding = "base64"); decode tolerantly
         // (URL-safe first, then standard) so either encoding is accepted.
-        String payload;
         try {
-            payload = new String(Base64.getUrlDecoder().decode(segments[1]), StandardCharsets.UTF_8);
+            return new String(Base64.getUrlDecoder().decode(segments[1]), StandardCharsets.UTF_8);
         } catch (IllegalArgumentException e) {
-            payload = new String(Base64.getDecoder().decode(segments[1]), StandardCharsets.UTF_8);
+            return new String(Base64.getDecoder().decode(segments[1]), StandardCharsets.UTF_8);
         }
-
-        Assert.assertTrue(payload.contains(attributeName),
-                "Decoded backend JWT does not contain attribute name '" + attributeName + "': " + payload);
-        Assert.assertTrue(payload.contains(attributeValue),
-                "Decoded backend JWT does not contain attribute value '" + attributeValue + "': " + payload);
     }
 
     /**
@@ -1802,6 +1843,131 @@ public class ApplicationBaseSteps {
         }
 
         TestContext.set("httpResponse", response);
+    }
+
+    /**
+     * Single-shot search (no polling) — for asserting an EMPTY / negative result (e.g. a non-existent tag), where
+     * the polling variant would needlessly block for the full timeout waiting for a match that will never appear.
+     */
+    @When("I search DevPortal APIs once with query {string}")
+    public void iSearchDevPortalAPIsOnceWithQuery(String query) throws IOException {
+        Map<String, String> headers = new HashMap<>();
+        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + Identity.devportalToken());
+        query = Utils.resolveContextPlaceholders(query);
+        String url = Utils.getApiSearchURL(getBaseUrl(), query);
+        TestContext.remove("httpResponse");
+        TestContext.set("httpResponse", SimpleHTTPClient.getInstance().doGet(url, headers));
+    }
+
+    /**
+     * Search variant that polls until the result set actually CONTAINS the expected value (a specific API name),
+     * not merely until it is non-empty — needed when asserting multiple APIs share a tag: the async index can
+     * surface the first match before the others, so a plain non-empty poll would race.
+     */
+    @When("I search DevPortal APIs with query {string} until it contains {string} within {int} seconds")
+    public void iSearchDevPortalAPIsWithQueryUntilContains(String query, String expected, int seconds)
+            throws IOException, InterruptedException {
+
+        Map<String, String> headers = new HashMap<>();
+        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + Identity.devportalToken());
+        query = Utils.resolveContextPlaceholders(query);
+        expected = Utils.resolveContextPlaceholders(expected);
+        String url = Utils.getApiSearchURL(getBaseUrl(), query);
+        long endTime = System.currentTimeMillis() + seconds * 1000L;
+        HttpResponse response;
+        while (true) {
+            response = SimpleHTTPClient.getInstance().doGet(url, headers);
+            boolean found = response != null && response.getResponseCode() == 200
+                    && response.getData().contains(expected);
+            if (found || System.currentTimeMillis() >= endTime) {
+                break;
+            }
+            Thread.sleep(2000);
+        }
+        TestContext.set("httpResponse", response);
+    }
+
+    /**
+     * Paginated search: polls until the returned page {@code count} equals the expected value, then leaves the
+     * response for assertion. Verifies the DevPortal page-size cap — with more matches than the limit, the page
+     * count saturates at the limit. The count is compared exactly (asserted after the loop, not left to a later
+     * Then), so a persistently wrong count fails the step itself.
+     */
+    @When("I search DevPortal APIs with query {string} and limit {int} until the result count is {int} within {int} seconds")
+    public void iSearchDevPortalAPIsWithLimitUntilCount(String query, int limit, int expectedCount, int seconds)
+            throws IOException, InterruptedException {
+
+        Map<String, String> headers = new HashMap<>();
+        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + Identity.devportalToken());
+        query = Utils.resolveContextPlaceholders(query);
+        String url = Utils.getApiSearchURLWithLimit(getBaseUrl(), query, limit);
+        long endTime = System.currentTimeMillis() + seconds * 1000L;
+        HttpResponse response;
+        int actual = -1;
+        while (true) {
+            response = SimpleHTTPClient.getInstance().doGet(url, headers);
+            if (response != null && response.getResponseCode() == 200) {
+                actual = new JSONObject(response.getData()).optInt("count", -1);
+            }
+            if (actual == expectedCount || System.currentTimeMillis() >= endTime) {
+                break;
+            }
+            Thread.sleep(2000);
+        }
+        TestContext.set("httpResponse", response);
+        Assert.assertNotNull(response, "No paginated search response");
+        Assert.assertEquals(actual, expectedCount,
+                "DevPortal paginated page count did not reach the expected value");
+    }
+
+    /**
+     * Retrieves the DevPortal tag cloud (GET /tags), polling until it contains the expected value — the tag cloud
+     * is backed by the same async index as search, so a freshly published API's tags may not appear immediately.
+     */
+    @When("I retrieve the DevPortal tag cloud until it contains {string} within {int} seconds")
+    public void iRetrieveDevPortalTagCloudUntilContains(String expected, int seconds)
+            throws IOException, InterruptedException {
+
+        Map<String, String> headers = new HashMap<>();
+        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + Identity.devportalToken());
+        expected = Utils.resolveContextPlaceholders(expected);
+        String url = Utils.getTagsURL(getBaseUrl());
+        long endTime = System.currentTimeMillis() + seconds * 1000L;
+        HttpResponse response;
+        while (true) {
+            response = SimpleHTTPClient.getInstance().doGet(url, headers);
+            boolean found = response != null && response.getResponseCode() == 200
+                    && response.getData().contains(expected);
+            if (found || System.currentTimeMillis() >= endTime) {
+                break;
+            }
+            Thread.sleep(2000);
+        }
+        TestContext.set("httpResponse", response);
+    }
+
+    /**
+     * Asserts a specific tag value appears in the captured tag-cloud response with an exact usage count. Parses the
+     * JSON list (not a substring match) so case- and space-distinct tag values are compared exactly.
+     */
+    @Then("the DevPortal tag cloud should contain tag {string} with count {int}")
+    public void tagCloudShouldContainTagWithCount(String tagValue, int expectedCount) {
+        tagValue = Utils.resolveContextPlaceholders(tagValue);
+        HttpResponse response = (HttpResponse) TestContext.get("httpResponse");
+        Assert.assertNotNull(response, "No tag cloud response captured");
+        Assert.assertEquals(response.getResponseCode(), 200, "Tag cloud retrieval failed");
+        JSONArray list = new JSONObject(response.getData()).getJSONArray("list");
+        Integer actual = null;
+        for (int i = 0; i < list.length(); i++) {
+            JSONObject tag = list.getJSONObject(i);
+            if (tagValue.equals(tag.optString("value"))) {
+                actual = tag.optInt("count");
+                break;
+            }
+        }
+        Assert.assertNotNull(actual, "Tag '" + tagValue + "' not found in the tag cloud");
+        Assert.assertEquals(actual.intValue(), expectedCount,
+                "Tag '" + tagValue + "' has an unexpected count in the tag cloud");
     }
 
     /**

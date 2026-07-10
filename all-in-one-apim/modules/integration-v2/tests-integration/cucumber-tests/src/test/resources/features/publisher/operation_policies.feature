@@ -43,6 +43,44 @@ Feature: Publisher Operation Policies
       | admin             |
       | admin@tenant1.com |
 
+  # Common operation policy export -> delete -> import round-trip: a created common policy is exported as a zip,
+  # a non-existing policy export returns 404, the policy is deleted (and disappears from the list), the exported
+  # archive is imported back (re-appearing in the list), and a second import of the same archive is rejected as a
+  # duplicate (409). Ports the export/import breadth of OperationPolicyTestCase (the runtime add-header slice is
+  # covered by gateway/mediation_policies.feature).
+  @cap:publisher @feat:operation-policies @rule:export-import @type:regression @legacy:OperationPolicyTestCase
+  Scenario Outline: A common operation policy survives an export/delete/import round-trip as <actor>
+    Given The system is ready and I have valid publisher access tokens as "<actor>"
+    When I create a new common policy with spec "artifacts/payloads/policySpecFiles/custom_add_common_header.j2" and "artifacts/payloads/policySpecFiles/custom_add_common_header.yaml" as "rtPolicyId"
+    Then The response status code should be 201
+
+    # Export the policy as a YAML-format archive; a non-existing policy export is a 404.
+    When I export the common operation policy named "custom_add_common_header" version "v1" format "yaml" as "rtArchive"
+    And I export a non-existing common operation policy named "no_such_policy_xyz" version "v1" format "yaml" expecting status 404
+
+    # Delete it — it disappears from the tenant's common-policy list.
+    When I delete the common operation policy "rtPolicyId"
+    Then The response status code should be 200
+    When I retrieve available common policies
+    Then The response status code should be 200
+    And The response should not contain "custom_add_common_header"
+
+    # Import the exported archive back — it re-appears in the list.
+    When I import the common operation policy archive "rtArchive" as "rtReimportedId"
+    Then The response status code should be 201
+    When I retrieve available common policies
+    Then The response status code should be 200
+    And The response should contain "custom_add_common_header"
+
+    # Importing the same archive again is rejected as a duplicate.
+    When I import the common operation policy archive "rtArchive" as "rtDuplicateId"
+    Then The response status code should be 409
+
+    Examples:
+      | actor             |
+      | admin             |
+      | admin@tenant1.com |
+
   @cap:publisher @feat:operation-policies @type:negative @legacy:GovernancePolicyBaselineTestCase
   Scenario Outline: A subscriber-role user cannot create a common operation policy as <actor>
     Given The system is ready and I have valid publisher access tokens as "<actor>"

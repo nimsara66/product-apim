@@ -86,6 +86,12 @@ public class APIInvocationSteps {
             case PUT:
                 response = client.doPut(endpointUrl, headers, payload, contentType);
                 break;
+            case PATCH:
+                response = client.doPatch(endpointUrl, headers, payload, contentType);
+                break;
+            case HEAD:
+                response = client.doHead(endpointUrl, headers);
+                break;
             default:
                 throw new IllegalArgumentException("Unsupported HTTP method for invocation: " + method);
         }
@@ -597,6 +603,39 @@ public class APIInvocationSteps {
         headers.put("ApiKey", actualKey);
 
         return execute(CurlOption.HttpMethod.valueOf(httpMethod.toUpperCase()), endpointUrl, headers, "");
+    }
+
+    /**
+     * API-key invocation carrying the key in a CONFIGURABLE header name, retrying until the expected status. An
+     * API can declare a custom api-key header (the {@code apiKeyHeader} field); the key is then accepted only in
+     * that header and rejected in the default {@code ApiKey} header. Ports the custom-api-key-header case of
+     * CustomHeaderTestCase.
+     */
+    @When("I invoke the API at gateway context {string} with method {string} using api key {string} in header {string} until response status code becomes {int} within {int} seconds")
+    public void invokeApiByContextUsingKeyInHeaderUntilStatus(String context, String httpMethod, String apikey,
+                                                              String headerName, int expectedStatus,
+                                                              int timeoutSeconds) throws Exception {
+        String resolvedContext = Utils.resolveContextPlaceholders(context);
+        String endpointUrl = getBaseGatewayUrl() + (resolvedContext.startsWith("/") ? "" : "/") + resolvedContext;
+        long deadlineMillis = Math.max(timeoutSeconds * 1000L, Constants.DEPLOYMENT_WAIT_TIME);
+        long endTime = System.currentTimeMillis() + deadlineMillis;
+        String actualKey = Utils.resolveFromContext(apikey).toString();
+        HttpResponse last = null;
+        do {
+            try {
+                Map<String, String> headers = new HashMap<>();
+                headers.put("accept", "application/json");
+                headers.put(headerName, actualKey);
+                last = execute(CurlOption.HttpMethod.valueOf(httpMethod.toUpperCase()), endpointUrl, headers, "");
+                if (last.getResponseCode() == expectedStatus) {
+                    return;
+                }
+            } catch (IOException transientDuringWarmup) {
+                // Retry transient connectivity only.
+            }
+            Thread.sleep(2000);
+        } while (System.currentTimeMillis() < endTime);
+        assertReachedExpectedStatus(last, expectedStatus);
     }
 
     /**

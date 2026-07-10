@@ -56,6 +56,8 @@
         <parameter name="initBackend" value="true"/>
         <classes>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayRestInvocationRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayCorsRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayMediationPoliciesRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewaySoapInvocationRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayGraphQLInvocationRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewaySecurityEnforcementRunner"/>
@@ -129,6 +131,17 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalApplicationAttributesRunner"/>
         </classes>
     </test>
+    <!-- Backend-JWT URL-safe encoding: its own block because [apim.jwt] encoding = base64url is a gateway-wide
+         config. Backend + backend-JWT overlay so the reflected X-JWT-Assertion can be decoded. -->
+    <test name="IntegrationV2-BackendJwtUrlSafe" parallel="classes" thread-count="1">
+        <parameter name="blockLabel" value="backend-jwt-urlsafe"/>
+        <parameter name="initTenantUsers" value="true"/>
+        <parameter name="initBackend" value="true"/>
+        <parameter name="tomlExtraOverlayPath" value="src/test/resources/artifacts/configFiles/backendJwtUrlSafe/deployment.toml"/>
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.KeyManagerBackendJwtUrlSafeRunner"/>
+        </classes>
+    </test>
     <!-- Mutual-SSL (mTLS) API invocation: needs a feature-specific overlay that shrinks the gateway's dynamic
          SSL-profile read interval (default 10 min) so an uploaded client certificate becomes active within
          seconds. Own block (the interval change is gateway-wide); initBackend for the cert-authenticated
@@ -176,6 +189,7 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminTenantConfigRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminSystemScopesRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminThrottlePolicyExportImportRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminApiCategoriesRunner"/>
         </classes>
     </test>
     <!-- B2B organization visibility. Own block: registers the organizationId local claim (SOAP) and provisions

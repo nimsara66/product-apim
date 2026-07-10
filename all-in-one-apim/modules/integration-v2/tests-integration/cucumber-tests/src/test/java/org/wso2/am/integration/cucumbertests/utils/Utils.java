@@ -304,6 +304,29 @@ public class Utils {
         return baseUrl + Constants.DEFAULT_DEVPORTAL + "apis?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
     }
 
+    public static String getApiSearchURLWithLimit(String baseUrl, String query, int limit) {
+        return baseUrl + Constants.DEFAULT_DEVPORTAL + "apis?limit=" + limit + "&query="
+                + URLEncoder.encode(query, StandardCharsets.UTF_8);
+    }
+
+    /** Publisher REST API — endpoint reachability validation (POST, endpointUrl + apiId as query params). */
+    public static String getValidateEndpointURL(String baseUrl, String endpointUrl, String apiId) {
+        return baseUrl + Constants.DEFAULT_APIM_API_DEPLOYER + "apis/validate-endpoint?endpointUrl="
+                + URLEncoder.encode(endpointUrl, StandardCharsets.UTF_8) + "&apiId="
+                + URLEncoder.encode(apiId, StandardCharsets.UTF_8);
+    }
+
+    /** DevPortal REST API — reset an application's throttle counter (POST body {"userName": owner}). */
+    public static String getResetThrottlePolicyURL(String baseUrl, String applicationId) {
+        return baseUrl + Constants.DEFAULT_DEVPORTAL + "applications/" + applicationId + "/reset-throttle-policy";
+    }
+
+    public static String getTagsURL(String baseUrl) {
+        // High limit so a tenant's full tag cloud is returned in one page (default is 25); under parallel load
+        // many tags coexist and a paginated default page could omit the tags a scenario just created.
+        return baseUrl + Constants.DEFAULT_DEVPORTAL + "tags?limit=200";
+    }
+
     public static String getDevportalApiDetailURL(String baseUrl, String apiId) {
         return baseUrl + Constants.DEFAULT_DEVPORTAL + "apis/" + apiId;
     }
@@ -412,6 +435,18 @@ public class Utils {
         return baseUrl + "services/RemoteUserStoreManagerService";
     }
 
+    public static String getIdentityApplicationManagementServiceURL(String baseUrl) {
+        return baseUrl + "services/IdentityApplicationManagementService";
+    }
+
+    public static String getOAuthAdminServiceURL(String baseUrl) {
+        return baseUrl + "services/OAuthAdminService";
+    }
+
+    public static String getClaimMetadataManagementServiceURL(String baseUrl) {
+        return baseUrl + "services/ClaimMetadataManagementService";
+    }
+
     public static String getNewAPIVersionURL(String baseUrl, String resourceType, String newVersion, Boolean defaultVersion, String apiId) {
 
         String endpointPath;
@@ -492,6 +527,21 @@ public class Utils {
         return baseUrl + Constants.DEFAULT_APIM_API_DEPLOYER + "operation-policies";
     }
 
+    public static String getCommonPolicyById(String baseUrl, String policyId) {
+        return baseUrl + Constants.DEFAULT_APIM_API_DEPLOYER + "operation-policies/" + policyId;
+    }
+
+    /** Publisher REST — export a common operation policy by name/version to a zip ({@code format} = yaml|json). */
+    public static String getCommonPolicyExportURL(String baseUrl, String name, String version, String format) {
+        return baseUrl + Constants.DEFAULT_APIM_API_DEPLOYER + "operation-policies/export?name=" + name
+                + "&version=" + version + "&format=" + format;
+    }
+
+    /** Publisher REST — import a common operation policy from a zip (multipart field {@code file}). */
+    public static String getCommonPolicyImportURL(String baseUrl) {
+        return baseUrl + Constants.DEFAULT_APIM_API_DEPLOYER + "operation-policies/import";
+    }
+
     public static String getAPISpecificPolicy(String baseUrl, String apiId) {
         return baseUrl + Constants.DEFAULT_APIM_API_DEPLOYER + "apis/" + apiId + "/operation-policies";
     }
@@ -556,6 +606,16 @@ public class Utils {
     /** Admin REST API — application throttling policies (create/list). */
     public static String getApplicationThrottlingPoliciesURL(String baseUrl) {
         return baseUrl + Constants.DEFAULT_APIM_ADMIN + "throttling/policies/application";
+    }
+
+    /** Admin REST API — API categories collection (list / create). */
+    public static String getApiCategoriesURL(String baseUrl) {
+        return baseUrl + Constants.DEFAULT_APIM_ADMIN + "api-categories";
+    }
+
+    /** Admin REST API — a single API category by id (update / delete). */
+    public static String getApiCategoryByIdURL(String baseUrl, String categoryId) {
+        return baseUrl + Constants.DEFAULT_APIM_ADMIN + "api-categories/" + categoryId;
     }
 
     /** Admin REST API — a single application throttling policy by id (get/update/delete). */
@@ -720,6 +780,28 @@ public class Utils {
 
     public static String getAPIDefinitionURL(String baseUrl) {
         return baseUrl + Constants.DEFAULT_APIM_API_DEPLOYER + "apis/import-openapi";
+    }
+
+    /** Publisher REST API — export an API as an archive (GET, returns a zip). */
+    public static String getApiExportURL(String baseUrl, String apiId, String format) {
+        return baseUrl + Constants.DEFAULT_APIM_API_DEPLOYER + "apis/export?apiId="
+                + URLEncoder.encode(apiId, StandardCharsets.UTF_8) + "&format="
+                + URLEncoder.encode(format, StandardCharsets.UTF_8);
+    }
+
+    /** Publisher REST API — import an API archive (POST multipart with the zip as the "file" part). */
+    public static String getApiArchiveImportURL(String baseUrl) {
+        return baseUrl + Constants.DEFAULT_APIM_API_DEPLOYER + "apis/import";
+    }
+
+    /** Publisher REST API — import an API from a WSDL (POST multipart: file OR url + additionalProperties). */
+    public static String getImportWsdlURL(String baseUrl) {
+        return baseUrl + Constants.DEFAULT_APIM_API_DEPLOYER + "apis/import-wsdl";
+    }
+
+    /** Publisher REST API — upload a custom Synapse sequence backend for an API (PUT multipart: sequence + type). */
+    public static String getSequenceBackendURL(String baseUrl, String apiId) {
+        return baseUrl + Constants.DEFAULT_APIM_API_DEPLOYER + "apis/" + apiId + "/sequence-backend";
     }
 
     /** Publisher REST API — OpenAPI definition validation (multipart file / url). */

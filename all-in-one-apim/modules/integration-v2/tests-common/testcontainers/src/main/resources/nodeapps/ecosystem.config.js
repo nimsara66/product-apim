@@ -167,6 +167,14 @@ module.exports = {
     env: {
       PORT: 3020
     }
+  },
+  {
+    name: "node-soap-service",
+    script: "./node-soap-service/server.js",
+    cwd: "./",
+    env: {
+      PORT: 3021
+    }
   }
   ]
 };

@@ -28,7 +28,9 @@ import io.cucumber.testng.CucumberOptions;
  */
 @CucumberOptions(
         features = {
-                "src/test/resources/features/devportal/application_attributes.feature"
+                "src/test/resources/features/devportal/application_attributes.feature",
+                // Backend-JWT claims (JWTTestCase) reuse this block's backend-JWT overlay + /reflect-headers backend.
+                "src/test/resources/features/key-manager/backend_jwt.feature"
         },
         glue = {
                 "org.wso2.am.integration.cucumbertests.stepdefinitions"
