@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!--
+  Workshop lane - beginner walkthrough of authoring an integration-v2 test.
+
+  Run it (from all-in-one-apim/modules/integration-v2):
+    mvn test -pl tests-integration/cucumber-tests -am -Dsurefire.suite.xml=testng-workshop.xml
+
+  ONE <test> block = ONE APIM container, booted by BlockLifecycleListener.onStart and shared by every
+  class listed below. Both workshop runners live in the same block so the container boots once for the
+  whole session rather than once per feature.
+
+  For part 1 (happy path only) leave the tenant runner commented out; uncomment it for part 2.
+
+  Deliberately NOT parallel: with the default sequential order the console output reads top-to-bottom in
+  the same order as the feature file, which matters when the run is on a projector. Real product blocks
+  set parallel="classes" thread-count="N".
+-->
+<suite name="Integration Tests Workshop" parallel="false">
+    <listeners>
+        <!-- Boots/stops the block's container and publishes its baseUrl + gateway URLs. Without this
+             listener no container is created at all. -->
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockLifecycleListener"/>
+        <!-- Binds the TestContext scope (shared = this block, local = this runner instance) on every
+             invocation. Omitting it does NOT error - scope silently falls back to a global default and
+             runners start seeing each other's state, which is far harder to debug than a failure. -->
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockScopeListener"/>
+    </listeners>
+
+    <test name="Workshop-GatewayInvocation">
+        <!-- blockLabel is the opt-in: no label, and BlockLifecycleListener no-ops (no container). -->
+        <parameter name="blockLabel" value="workshop"/>
+        <!-- Provisions admin / publisherUser / subscriberUser into carbon.super AND tenant1.com, which is
+             what makes `I have valid access tokens as "admin@tenant1.com"` resolvable in part 2. -->
+        <parameter name="initTenantUsers" value="true"/>
+        <!-- Starts the NodeAppServer upstream at network alias "nodebackend" (the endpoint URL in
+             create_apim_test_api.json). Drop this parameter and the gateway suspends the endpoint:
+             invocation returns HTTP 500 with "303001 ... endpoint SUSPENDED" instead of 200. -->
+        <parameter name="initBackend" value="true"/>
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.WorkshopRestInvocationRunner"/>
+            <!-- Part 2: uncomment to add the both-tenants outline.
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.WorkshopRestInvocationTenantsRunner"/>
+            -->
+        </classes>
+    </test>
+</suite>
