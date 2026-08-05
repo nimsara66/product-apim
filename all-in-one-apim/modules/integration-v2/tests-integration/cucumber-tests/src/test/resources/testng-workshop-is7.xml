@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!--
+  Workshop segment 4 - an external Identity Server as the key manager.
+
+  Run it (from all-in-one-apim/modules/integration-v2):
+    mvn test -pl tests-integration/cucumber-tests -am -Dsurefire.suite.xml=testng-workshop-is7.xml
+
+  SLOWER THAN THE OTHER SEGMENTS: this block boots TWO servers (APIM and WSO2 IS 7.x), so allow several
+  minutes. Start the run before you begin narrating.
+
+  PREREQUISITE beyond the APIM image: the IS staging artifacts under
+  tests-common/testcontainers/target/is7/ (augmented truststores, the IS default deployment.toml, and the
+  notification handler jar). They are produced by the testcontainers module's pre-integration-test execs,
+  which `mvn install` runs but `mvn test` does NOT. If the block fails at boot complaining about a missing
+  truststore or toml, run once from all-in-one-apim/modules/integration-v2:
+    mvn install -pl tests-integration/cucumber-tests -am -DskipTests
+-->
+<suite name="Integration Tests Workshop IS7" parallel="false">
+    <listeners>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockLifecycleListener"/>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockScopeListener"/>
+    </listeners>
+
+    <test name="Workshop-Is7ExternalIdp">
+        <parameter name="blockLabel" value="workshop-is7"/>
+        <parameter name="initTenantUsers" value="true"/>
+        <parameter name="initBackend" value="true"/>
+        <!-- INFRASTRUCTURE ONLY. Adds the IS TLS cert to APIM's client-truststore BEFORE APIM boots (the JVM
+             reads the truststore once at startup), then starts the IS container on the shared docker network
+             at alias wso2is and waits for its OIDC discovery. It deliberately does NOT register IS as a key
+             manager - that is admin product behaviour and lives in the feature, as a step. -->
+        <parameter name="bootExternalIdentityServer" value="true"/>
+        <!-- Points APIM's TLS keystore at wso2am.p12 (CN=wso2am, SAN dns:localhost,dns:wso2am), the config the
+             known-good external-KM block uses. Contrast with segment 3's overlay: that one changed GATEWAY
+             behaviour, this one changes APIM's own TLS identity. Same mechanism, different purpose. -->
+        <parameter name="tomlExtraOverlayPath" value="src/test/resources/artifacts/configFiles/is7km/deployment.toml"/>
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.WorkshopIs7InvocationRunner"/>
+        </classes>
+    </test>
+</suite>
