@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!--
+  Workshop segment 3 - feature-specific server config via a TOML overlay.
+
+  Run it (from all-in-one-apim/modules/integration-v2):
+    mvn test -pl tests-integration/cucumber-tests -am -Dsurefire.suite.xml=testng-workshop-overlay.xml
+
+  This is a SEPARATE block from testng-workshop.xml, and therefore a separate container: server config is
+  per-block, so a feature needing non-default config cannot share the default block.
+
+  Suggested running order for the session:
+    A. Uncomment WorkshopRestInvocationRunner below and run. Workshop 1's feature now FAILS: its
+       invocation presents the token in "Authorization", which this container no longer reads.
+       Note it takes the full 60s retry window to fail - the invoke step retries until the expected
+       status or the deadline, so a genuine failure is slow by design. Show the 401 in the log.
+    B. Re-comment it and run again (default state). The custom-auth-header feature passes, because it
+       uses the invoke variant that names the header. The fix was choosing an existing step, not
+       writing a new one.
+-->
+<suite name="Integration Tests Workshop Overlay" parallel="false">
+    <listeners>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockLifecycleListener"/>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockScopeListener"/>
+    </listeners>
+
+    <test name="Workshop-CustomAuthHeader">
+        <parameter name="blockLabel" value="workshop-overlay"/>
+        <parameter name="initTenantUsers" value="true"/>
+        <parameter name="initBackend" value="true"/>
+        <!-- The one new parameter. Merged ON TOP of the shared `basic` overlay, which is itself merged
+             onto the distribution deployment.toml baked into the image - so the block still inherits
+             every default. Do NOT use the full-file `tomlOverlayPath` for a product test: it replaces
+             the whole config verbatim and drops the DB/port/gateway wiring. -->
+        <parameter name="tomlExtraOverlayPath" value="src/test/resources/artifacts/configFiles/workshop/deployment.toml"/>
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.WorkshopCustomAuthHeaderRunner"/>
+            <!-- Step A: uncomment to watch Workshop 1's feature break (401) under this server config.
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.WorkshopRestInvocationRunner"/>
+            -->
+        </classes>
+    </test>
+</suite>

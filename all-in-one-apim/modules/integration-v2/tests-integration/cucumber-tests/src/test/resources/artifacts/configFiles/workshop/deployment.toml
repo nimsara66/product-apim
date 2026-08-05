@@ -1,0 +1,20 @@
+# Workshop TOML overlay - the smallest useful example of `tomlExtraOverlayPath`.
+#
+# HOW IT IS LAYERED (three files, deep-merged in this order by Utils.mergeTomls):
+#   1. the product distribution's deployment.toml, baked into the container image  (the base)
+#   2. artifacts/configFiles/basic/deployment.toml                                 (shared test defaults)
+#   3. THIS FILE                                                                   (the block's extras)
+#
+# So this file lists ONLY what differs from the default. Everything else - databases, ports, gateway
+# wiring - is inherited. That is why an extra overlay is almost always what you want, and why the
+# full-file `tomlOverlayPath` (verbatim replacement) is NOT: it would drop all of the above.
+#
+# Wired to the block by the `tomlExtraOverlayPath` parameter in testng-workshop-overlay.xml.
+#
+# EFFECT: the gateway reads the OAuth2 bearer token from "Test-Custom-Header" instead of the standard
+# "Authorization" header. This is a GATEWAY DATA-PLANE setting only - the management APIs (publisher /
+# devportal / admin) still authenticate with Authorization, which is why the create, publish and
+# subscribe steps in the feature are completely unaffected. Only the invocation changes.
+
+[apim.oauth_config]
+auth_header = "Test-Custom-Header"
