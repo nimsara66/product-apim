@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!--
+  Multi-tenant portal SSO lane: API Manager federating a tenant portal to an external WSO2 IS 7.x through the
+  nested-OIDC multi-tenant broker (multiTenantAuthenticator). A dedicated block (own APIM + IS) because the
+  multi-tenant configuration is behaviour-changing (tenant-qualified URLs, tenanted sessions, disabled default
+  JIT provisioning handler, unauthenticated select-tenant page) and must not affect the other lanes.
+  bootExternalIdentityServer=true starts IS on the shared network and augments APIM's truststore before boot (so
+  the federated OIDC/token legs to https://wso2is:9443 are trusted); the block's own provisioning creates the SSO
+  IdPs/SPs. Runs MultiTenantSsoRunner: provision the broker topology, then drive the headless Publisher login and
+  assert it completes (authorization code reaches the publisher callback and the access-token cookie is issued).
+
+  Kept OUT of testng-v2.xml (unlike the other IS7 blocks, merged there): this block needs an IS with a DISTINCT
+  toml overlay (isTomlExtraOverlayPath below), i.e. a second IdentityServerContainer, which would collide with
+  the default-overlay IS singleton on the fixed wso2is network alias. Run this suite in its own JVM until IS
+  aliases + KM payload endpoints are parameterized per overlay instance.
+-->
+<suite name="IntegrationV2 Multi-Tenant SSO" parallel="false">
+    <listeners>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockLifecycleListener"/>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockScopeListener"/>
+    </listeners>
+    <test name="IntegrationV2-MultiTenantSso">
+        <parameter name="blockLabel" value="mt-sso"/>
+        <parameter name="initTenantUsers" value="true"/>
+        <!-- Boot IS as reusable infra (federated IdP) with the tenant-sync extra overlay (TenantSyncListener:
+             tenants created in IS sync to APIM - the tenant-sharing path the official SSO guide prescribes).
+             The third-party KM registration - the prerequisite that pollutes APIM's JVM SSL context and
+             triggers the pinned token-exchange regression - is a feature-level step in
+             _setup_multitenant_sso.feature, not block infra. -->
+        <parameter name="bootExternalIdentityServer" value="true"/>
+        <!-- This block consumes the IS→APIM reverse channel (the TenantSyncListener POSTs tenant events to
+             https://wso2am:9443/internal/data/v1/notify), so its APIM must bind the fixed wso2am alias. -->
+        <parameter name="receiveExternalIsNotifications" value="true"/>
+        <parameter name="isTomlExtraOverlayPath" value="src/test/resources/artifacts/configFiles/is7sso/is-tenant-sync-overlay.toml"/>
+        <parameter name="tomlExtraOverlayPath" value="src/test/resources/artifacts/configFiles/is7sso/deployment.toml"/>
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.MultiTenantSsoRunner"/>
+        </classes>
+    </test>
+</suite>

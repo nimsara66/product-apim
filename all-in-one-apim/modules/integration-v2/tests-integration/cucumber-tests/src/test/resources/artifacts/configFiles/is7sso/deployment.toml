@@ -1,0 +1,43 @@
+# APIM overlay for the multi-tenant portal SSO block (external WSO2 IS 7.x as the federated IdP).
+#
+# Merged on top of base+basic by BlockLifecycleListener (tomlExtraOverlayPath). It carries the multi-tenant SSO
+# configuration from the official guide
+# (install-and-setup/setup/sso/configuring-external-idp-using-oidc-for-multi-tenancy). DELIBERATE DEVIATION from
+# that guide: its [[event_listener]] block registers
+# org.wso2.carbon.identity.outbound.organization.auth.OrganizationJITProvisioningHandler, but that class does not
+# exist anywhere in the APIM distribution (verified against every plugin jar) - the shipped handler is
+# MultiTenantJITProvisioningHandler (org.wso2.carbon.apimgt.multitenant.auth), which auto-registers as an OSGi
+# PostAuthenticationHandler. So only the default JIT handler is disabled here.
+#
+# The [keystore.tls] wso2am.p12 pin (same as the pure external-KM blocks - see configFiles/is7km) is REQUIRED
+# here for IS -> APIM tenant synchronization: IS's TenantSyncListener POSTs to https://wso2am:9443 with strict
+# hostname verification, so APIM must present a cert whose SAN covers 'wso2am' - and APIM's own
+# TenantManagementEventHandler creates the tenant through a SOAP self-call that must TRUST that same cert (the
+# augmented client-truststore from withExternalKmTrust contains it). NB: this block deliberately reproduces the
+# multi-tenant SSO token-exchange regression - registering the external key manager pollutes APIM's JVM-global
+# SSL context with a client key manager, so the innermost broker token call to IS presents a client cert AND the
+# client secret and IS rejects it ("The client MUST NOT use more than one authentication method"), failing the
+# login with login_required. That happens regardless of this [keystore.tls] choice (verified); the
+# multitenant_sso feature pins that failure. A CLEAN APIM with no external KM completes the same login.
+
+[keystore.tls]
+file_name = "wso2am.p12"
+type = "PKCS12"
+password = "wso2carbon"
+alias = "wso2carbon"
+key_password = "wso2carbon"
+
+[tenant_context]
+enable_tenant_qualified_urls = true
+enable_tenanted_sessions = true
+skip_tenant_validation_for_oauth_endpoints = true
+session_manager = "org.apache.catalina.session.StandardManager"
+
+[event.default_listener.jit_provisioning_handler]
+enable = false
+
+# Serve the tenant-selection page unauthenticated (the multiTenantAuthenticator redirects here pre-login).
+[[resource.access_control]]
+context = "(.*)/select-tenant(.*)"
+secure = false
+http_method = "all"

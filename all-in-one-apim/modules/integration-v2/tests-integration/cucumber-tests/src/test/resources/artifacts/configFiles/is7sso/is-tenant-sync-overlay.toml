@@ -1,0 +1,23 @@
+# IS deployment.toml EXTRA overlay for the multi-tenant SSO block (isTomlExtraOverlayPath): enables
+# IS -> API Manager tenant synchronization per the official tenant-sharing guide
+# (administer/multitenancy/tenant-sharing-with-wso2is7). On tenant create/update/activate in IS, the
+# TenantSyncListener POSTs a TENANT_MANAGEMENT event to APIM's /internal/data/v1/notify (basic auth as a user
+# holding the super admin's modify/tenant permission), and APIM's TenantManagementEventHandler creates and then
+# activates the same tenant - with the same admin credentials - on the APIM side. Verified empirically: APIM
+# must PRESENT the wso2am cert ([keystore.tls] wso2am.p12 in the block's APIM overlay - IS's sender does strict
+# hostname verification on https://wso2am:9443) and must TRUST it too (the handler creates the tenant through a
+# SOAP self-call; the augmented client-truststore from withExternalKmTrust covers both). The listener retries
+# with exponential backoff, so events survive brief APIM unavailability but are LOST once retries exhaust.
+# This is appended AFTER the built-in is7/deployment-overlay.toml (which already carries one [[event_listener]]
+# for token-revocation notifications; array-of-tables entries are additive).
+
+[[event_listener]]
+id = "tenant_creation"
+type = "org.wso2.carbon.user.core.listener.UserOperationEventListener"
+name = "org.wso2.carbon.identity.mgt.listener.TenantSyncListener"
+order = 1
+[event_listener.properties]
+notification_endpoint = "https://wso2am:9443/internal/data/v1/notify"
+username = "admin"
+password = "admin"
+'header.X-WSO2-KEY-MANAGER' = "TENANT_MANAGEMENT"
