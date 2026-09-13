@@ -1,6 +1,7 @@
 package org.wso2.am.testcontainers;
 
 import org.testng.Assert;
+import org.testng.SkipException;
 import org.testng.annotations.Test;
 import org.testcontainers.containers.Network;
 
@@ -9,6 +10,9 @@ public class DistributedMySqlContainerTest {
 
     @Test
     public void shouldInitializeDatabasesAndSeedSchema() throws Exception {
+        if (!Boolean.getBoolean("distributed.apim.boot.probe")) {
+            throw new SkipException("Distributed MySQL container probe is opt-in");
+        }
         try (Network network = Network.newNetwork();
              DistributedMySqlContainer mysql = new DistributedMySqlContainer(network)
                      .withSchema(DistributedMySqlContainer.APIM_DATABASE,
@@ -25,8 +29,13 @@ public class DistributedMySqlContainerTest {
                     DistributedMySqlContainer.APIM_DATABASE, "-N", "-B", "-e",
                     "SELECT COUNT(*) FROM V2_PROBE;").getStdout().trim(), "1");
 
-            // A fresh block must be independently reproducible and must not retain
-            // data from the previous container instance.
+            // Insert data outside the schema callback so the restart check can distinguish a fresh database
+            // from a container that retained state from the previous instance.
+            mysql.execInContainer("mysql", "-h127.0.0.1", "-u"
+                            + DistributedMySqlContainer.DATABASE_USER, "-p"
+                            + DistributedMySqlContainer.DATABASE_PASSWORD,
+                    DistributedMySqlContainer.APIM_DATABASE, "-e",
+                    "INSERT INTO V2_PROBE (ID) VALUES (2);");
             mysql.stop();
             mysql.start();
             Assert.assertEquals(mysql.execInContainer("mysql", "-h127.0.0.1", "-u"
@@ -34,6 +43,11 @@ public class DistributedMySqlContainerTest {
                             + DistributedMySqlContainer.DATABASE_PASSWORD,
                     DistributedMySqlContainer.APIM_DATABASE, "-N", "-B", "-e",
                     "SELECT COUNT(*) FROM V2_PROBE;").getStdout().trim(), "1");
+            Assert.assertEquals(mysql.execInContainer("mysql", "-h127.0.0.1", "-u"
+                            + DistributedMySqlContainer.DATABASE_USER, "-p"
+                            + DistributedMySqlContainer.DATABASE_PASSWORD,
+                    DistributedMySqlContainer.APIM_DATABASE, "-N", "-B", "-e",
+                    "SELECT COUNT(*) FROM V2_PROBE WHERE ID = 2;").getStdout().trim(), "0");
         }
     }
 }

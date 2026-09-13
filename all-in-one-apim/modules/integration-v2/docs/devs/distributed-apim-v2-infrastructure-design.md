@@ -34,9 +34,9 @@ The shared TestContext contract is:
 
 The distributed replacement must publish the same keys with the same meanings. Physical ownership may change: baseUrl will point to CP while gateway accessors will point to the Universal Gateway.
 
-## 3. Findings from the developer distributed setup
+## 3. Findings from the developer-distributed setup
 
-The feasibility study also used a developer distributed setup that is outside this repository. Its original
+The feasibility study also used a developer-distributed setup that is outside this repository. Its original
 machine-local source is intentionally not recorded here; the durable in-repository implementation references are
 the distributed container resources and README listed in Section 16.
 
@@ -209,7 +209,7 @@ The distributed base overlays must cover database settings, CP event publishing,
 | tomlExtraOverlayPath | Keep only as safe compatibility alias; prefer dotted parameters |
 | serverFilesToCopy | Add component-qualified form |
 | bootPlatformGateway | Define explicitly; it would add another gateway beside Universal Gateway |
-| apim.coverage | Defer or collect all three JVMs; never report CP-only coverage as full APIM coverage |
+| apim.coverage | Intentionally disabled | Coverage is collected only by the all-in-one suite |
 
 ## 11. Readiness and acceptance probes
 
@@ -251,7 +251,11 @@ The wso2am alias must resolve to CP. This ownership must be encoded, not inferre
 
 ### Coverage
 
-JaCoCo currently models one APIM JVM per block. Distributed coverage requires three agent ports and a merge. It is out of scope for the first checkpoint and must be explicitly rejected or deferred.
+JaCoCo coverage is intentionally limited to the all-in-one topology. Both topologies execute the same product scenarios
+against the shared `carbon-apimgt` code base; the distributed topology changes product packaging and process boundaries,
+not the code under test. Distributed CP, TM, and Gateway JVM coverage would require a separate multi-JVM collector and
+would not be comparable to the all-in-one report, so the distributed suite does not enable, collect, validate, or upload
+coverage. The CI matrix makes this distinction explicit.
 
 ## 13. Feasibility matrix
 
@@ -267,11 +271,19 @@ JaCoCo currently models one APIM JVM per block. Distributed coverage requires th
 | Component-specific overlays | Feasible | Dotted parameters and generated-value precedence |
 | Transparent MySQL ownership | Feasible | Composite owns connector, schemas, health, cleanup |
 | Complete Publisher/Gateway checkpoint | Feasible | First focused distributed suite |
-| Immediate distributed coverage | Not in first phase | Multi-JVM collector required |
+| Distributed coverage | Intentionally omitted | Coverage is collected only in the all-in-one suite |
 
 ## 14. First checkpoint
 
 Create a focused distributed TestNG suite containing the complete current Publisher and Gateway blocks. Do not run the entire testng-v2.xml suite until this checkpoint passes.
+
+The long-term topology contract is runner parity: `testng-v2.xml` and
+`testng-v2_distributed.xml` must contain the same product runner/scenario
+inventory. Only the lifecycle listener, topology-specific block parameters,
+and component-qualified configuration may differ. The distributed file is
+currently still the incremental Publisher/Gateway checkpoint, so this parity
+requirement remains outstanding; coverage policy must not be used to justify a
+different product scenario set.
 
 The checkpoint must prove:
 
@@ -292,7 +304,7 @@ Only then should Admin, DevPortal, SSO, and the remaining blocks be added.
 * No fixed developer host offsets inside containers.
 * No full developer TOML copied as an immutable fixture.
 * No suite-wide distributed optimization in the first implementation.
-* No CP-only distributed coverage claim.
+* No distributed coverage claim; coverage is an all-in-one-only CI concern.
 * No change to all-in-one listener behavior.
 
 ## 16. References
@@ -300,7 +312,7 @@ Only then should Admin, DevPortal, SSO, and the remaining blocks be added.
 * Current lifecycle: all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/src/test/java/org/wso2/am/integration/cucumbertests/utils/listeners/BlockLifecycleListener.java
 * Current container: all-in-one-apim/modules/integration-v2/tests-common/testcontainers/src/main/java/org/wso2/am/testcontainers/DynamicApimContainer.java
 * Composite gateway example: all-in-one-apim/modules/integration-v2/tests-common/testcontainers/src/main/java/org/wso2/am/testcontainers/DynamicPlatformGatewayContainer.java
-* Original developer distributed setup: unavailable in this repository; its machine-local paths are intentionally not
+* Original developer-distributed setup: unavailable in this repository; its machine-local paths are intentionally not
   documented. The durable implementation references are the distributed Dockerfile, component overlays, startup
   script, and README under `all-in-one-apim/modules/integration-v2/tests-common/testcontainers/src/main/resources/distributed-apim/`.
 
@@ -327,7 +339,7 @@ contract facts are:
   and verification probes. A composite cannot be substituted under the same
   TestContext key until those consumers use `ApimRuntime` or an equivalent
   adapter.
-* The developer distributed setup starts only MySQL in Compose; CP, TM, and
+* The developer-distributed setup starts only MySQL in Compose; CP, TM, and
   Universal Gateway are host processes started by `run.sh`. Its `localhost`
   routes, host port offsets, and full TOMLs therefore cannot be copied into
   the Testcontainers implementation.
@@ -485,8 +497,12 @@ overlay and server-file resolution behind the same block-facing abstraction.
 Existing block parameters continue to enter through the lifecycle contract;
 distributed overlays and boot files are resolved per component. The distributed
 focused suite is `tests-integration/cucumber-tests/src/test/resources/testng-v2_distributed.xml`.
-It currently contains the Publisher and Gateway blocks, with the two MCP
-product-bug runners intentionally commented out and tracked separately.
+It currently contains the Publisher and Gateway blocks. The two suites are
+required to converge on the same product runner/scenario inventory; the
+current distributed file remains an incremental checkpoint and therefore has
+not reached that parity yet. Coverage remains enabled only for
+`testng-v2.xml`, because the distributed runtime intentionally does not expose
+a JaCoCo collection path.
 
 The composite and configuration focused tests were run with the required
 Colima/Testcontainers Docker variables. The distributed Gateway REST invocation

@@ -11,7 +11,8 @@
   Deliberately its own suite rather than a block in testng-framework-verification.xml, whose gate asserts a
   specific set of Phase-6.1 blocks and container counts.
 
-  Run: mvn test -pl tests-integration/cucumber-tests -am \
+  This suite is executed by the v2 CI matrix as a non-coverage all-in-one framework guard. It can also be run
+  manually with: mvn test -pl tests-integration/cucumber-tests -am \
          -Dsurefire.suite.xml=testng-fv-backend-port-stability.xml
 -->
 <suite name="Framework Verification - backend host port stability" parallel="tests" thread-count="1">

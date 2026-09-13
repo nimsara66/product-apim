@@ -31,28 +31,52 @@ are executable before the Docker builds begin. It does not verify
 product-version compatibility between the ZIPs and the connector, so those
 versions must be selected deliberately.
 
-Docker must be available to the shell running the script. On Colima, use the
+Docker must be available to the shell running Maven. On Colima, use the
 same Docker environment variables used by the focused integration suites:
 
 ```bash
-export DOCKER_HOST=unix:///Users/nimsara/.colima/default/docker.sock
+export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
 export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
 export TESTCONTAINERS_HOST_OVERRIDE=192.168.64.2
 ```
 
 ## Build the images
 
-From this directory, run:
+The three component images are built by the `build-distributed-apim-*-docker-image`
+Maven executions in `tests-common/testcontainers/pom.xml`. Build the product
+distributions first, then invoke the integration-v2 lifecycle from the
+`modules/integration-v2` directory:
 
 ```bash
-./build-images.sh \
-  --cp-zip /path/to/wso2am-acp-<version>.zip \
-  --tm-zip /path/to/wso2am-tm-<version>.zip \
-  --gateway-zip /path/to/wso2am-universal-gw-<version>.zip \
-  --connector /path/to/mysql-connector-j-8.4.0.jar
+mvn pre-integration-test -pl tests-common/testcontainers -am
 ```
 
-The default output tags are:
+The executions read these Maven properties, whose defaults point to the ZIPs
+produced by the repository reactor:
+
+```text
+distributed.apim.cp.zip
+distributed.apim.tm.zip
+distributed.apim.gateway.zip
+distributed.apim.cp.image.name
+distributed.apim.tm.image.name
+distributed.apim.gateway.image.name
+```
+
+Override the ZIP and image-name properties with `-D` when using distributions
+from another location. For example:
+
+```bash
+mvn pre-integration-test -pl tests-common/testcontainers -am \
+  -Ddistributed.apim.cp.zip=/path/to/wso2am-acp-<version>.zip \
+  -Ddistributed.apim.tm.zip=/path/to/wso2am-tm-<version>.zip \
+  -Ddistributed.apim.gateway.zip=/path/to/wso2am-universal-gw-<version>.zip \
+  -Ddistributed.apim.cp.image.name=distributed-apim-cp:<version>-jdk21 \
+  -Ddistributed.apim.tm.image.name=distributed-apim-tm:<version>-jdk21 \
+  -Ddistributed.apim.gateway.image.name=distributed-apim-gateway:<version>-jdk21
+```
+
+The default image names are:
 
 ```text
 distributed-apim-cp:4.7.0-SNAPSHOT-jdk21
@@ -60,13 +84,14 @@ distributed-apim-tm:4.7.0-SNAPSHOT-jdk21
 distributed-apim-gateway:4.7.0-SNAPSHOT-jdk21
 ```
 
-The script also accepts `--tag VERSION`. The Maven build passes the resolved
-image names to `DistributedDynamicApimContainer`; when using this standalone
-script, pass matching image names through the Maven properties. Do not assume
-that passing `--tag` alone changes the image used by the test suite.
+The same image-name properties are passed to the test JVM, so the image names
+used for building and testing stay aligned. Changing an image tag requires
+changing the corresponding image-name properties as well; changing only an
+unrelated Docker tag does not retag an existing image or update the test JVM.
 
 The build context is temporary and is removed after each image build. The
-input ZIPs and connector are not modified. The Dockerfile installs each
+input ZIPs and connector are not modified. Maven resolves the MySQL
+Connector/J version and stages it for each build. The Dockerfile installs each
 component under `/opt/wso2`, copies the connector to
 `repository/components/lib/mysql-connector-j.jar`, and starts the selected
 component through `start-component.sh`.
