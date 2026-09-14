@@ -48,7 +48,7 @@ distributions first, then invoke the integration-v2 lifecycle from the
 `modules/integration-v2` directory:
 
 ```bash
-mvn pre-integration-test -pl tests-common/testcontainers -am
+mvn pre-integration-test -Pinclude-distributed-images -pl tests-common/testcontainers -am
 ```
 
 The executions read these Maven properties, whose defaults point to the ZIPs
@@ -67,7 +67,7 @@ Override the ZIP and image-name properties with `-D` when using distributions
 from another location. For example:
 
 ```bash
-mvn pre-integration-test -pl tests-common/testcontainers -am \
+mvn pre-integration-test -Pinclude-distributed-images -pl tests-common/testcontainers -am \
   -Ddistributed.apim.cp.zip=/path/to/wso2am-acp-<version>.zip \
   -Ddistributed.apim.tm.zip=/path/to/wso2am-tm-<version>.zip \
   -Ddistributed.apim.gateway.zip=/path/to/wso2am-universal-gw-<version>.zip \

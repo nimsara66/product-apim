@@ -28,7 +28,6 @@ import org.wso2.am.integration.cucumbertests.utils.Requests;
 import org.wso2.am.integration.cucumbertests.utils.ResourceCleanup;
 import org.wso2.am.integration.cucumbertests.utils.TestContext;
 import org.wso2.am.integration.cucumbertests.utils.Utils;
-import org.wso2.am.integration.cucumbertests.utils.clients.SimpleHTTPClient;
 import org.wso2.am.testcontainers.DynamicPlatformGatewayContainer;
 import org.wso2.carbon.automation.test.utils.http.client.HttpResponse;
 
@@ -186,10 +185,11 @@ public class PlatformGatewaySteps {
         String base = dataPlaneUrl.endsWith("/") ? dataPlaneUrl.substring(0, dataPlaneUrl.length() - 1) : dataPlaneUrl;
         String path = context.startsWith("/") ? context : "/" + context;
         String url = base + path + "/1.0.0/reflect-headers";
-        // Data plane is HTTPS with a self-signed listener cert (CN=localhost); SimpleHTTPClient trusts all in the
-        // test lane. Invocation is async (the deploy propagates to the gateway over the WS), so retry until ready.
+        // Data plane is HTTPS with a self-signed listener cert (CN=localhost); the shared Requests funnel uses
+        // SimpleHTTPClient, which trusts all in the test lane. Invocation is async (the deploy propagates to the
+        // gateway over the WS), so retry until ready.
         HttpResponse resp = Utils.retryUntil(timeoutSeconds * 1000L,
-                () -> SimpleHTTPClient.getInstance().doGet(url, headers),
+                () -> Requests.get(url, headers),
                 r -> r != null && r.getResponseCode() == expectedStatus);
         if (resp != null) {
             TestContext.set("httpResponse", resp);

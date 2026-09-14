@@ -209,7 +209,7 @@ The distributed base overlays must cover database settings, CP event publishing,
 | tomlExtraOverlayPath | Keep only as safe compatibility alias; prefer dotted parameters |
 | serverFilesToCopy | Add component-qualified form |
 | bootPlatformGateway | Define explicitly; it would add another gateway beside Universal Gateway |
-| apim.coverage | Intentionally disabled | Coverage is collected only by the all-in-one suite |
+| apim.coverage | Intentionally disabled; coverage is collected only by the all-in-one suite |
 
 ## 11. Readiness and acceptance probes
 

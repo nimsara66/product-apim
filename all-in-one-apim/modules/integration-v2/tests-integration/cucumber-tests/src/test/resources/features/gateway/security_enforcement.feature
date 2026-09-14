@@ -442,7 +442,7 @@ Feature: Gateway Security Enforcement
     Given The system is ready
     And I have valid access tokens as "<actor>"
     And I have created an api from "artifacts/payloads/create_apim_test_api.json" as "atApiId" and deployed it
-    When I publish the "apis" resource with id "atApiId"
+    When I publish the "apis" resource with id "atApiId", healing if the transition is lost
     Then The lifecycle status of API "atApiId" should be "Published"
     # Deploy-readiness gate: the token-less invokes below can only retry the REQUEST, so a lost runtime
     # propagation event is unrecoverable that way and surfaces as a 404 "Invalid URL" instead of the

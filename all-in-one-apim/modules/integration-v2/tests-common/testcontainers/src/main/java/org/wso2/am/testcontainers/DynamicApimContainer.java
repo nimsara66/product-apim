@@ -277,7 +277,9 @@ public class DynamicApimContainer extends GenericContainer<DynamicApimContainer>
 
     @Override
     public String getBackendOAuthTokenUrl() {
-        return getServletHttpsUrl() + "oauth2/token";
+        // This URL is consumed from inside the APIM container. Do not use the host-mapped servlet URL here:
+        // the mapped port is reachable from the test JVM, not from the container's network namespace.
+        return "https://localhost:9443/oauth2/token";
     }
 
     public String getGatewayHttpsUrl() {

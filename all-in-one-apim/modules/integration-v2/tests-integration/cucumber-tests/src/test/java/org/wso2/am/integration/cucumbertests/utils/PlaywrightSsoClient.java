@@ -486,7 +486,7 @@ public final class PlaywrightSsoClient implements AutoCloseable {
             // can report ERR_ABORTED when that redirect replaces the document while navigate() is waiting for
             // DOMContentLoaded. The document response trail still records the redirect and is what the fresh-login
             // assertion evaluates; unrelated navigation failures must remain visible to the test.
-            if (!e.getMessage().contains("net::ERR_ABORTED")) {
+            if (!isRedirectAborted(e)) {
                 throw e;
             }
             log.info("[SSO] console '" + consoleContext
@@ -594,9 +594,22 @@ public final class PlaywrightSsoClient implements AutoCloseable {
      */
     public void logoutFromConsole(String consoleContext) {
         int mark = docTrail.size();
-        page.navigate(apimInternal + "/" + consoleContext + "/services/logout",
-                new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
-        page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE);
+        try {
+            page.navigate(apimInternal + "/" + consoleContext + "/services/logout",
+                    new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
+            page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE);
+        } catch (PlaywrightException e) {
+            // Federated logout replaces the current document several times (APIM -> resident IS -> external IdP ->
+            // APIM callback). Chromium can report ERR_ABORTED when one redirect replaces the document while
+            // navigate()/waitForLoadState() is waiting. The callback response trail is the reliable completion
+            // signal; unrelated browser failures must still fail immediately.
+            if (!isRedirectAborted(e)) {
+                throw e;
+            }
+            log.info("[SSO] '" + consoleContext
+                    + "' logout navigation was interrupted by a redirect; waiting for its callback");
+            waitForLogoutNavigationOutcome(consoleContext, mark, 30000);
+        }
         settle();
         // Fail HERE if the logout endpoint did not answer. Otherwise the session simply survives and the residue
         // assertions below report a global-logout failure, which reads as a product defect rather than a bad URL.
@@ -609,6 +622,39 @@ public final class PlaywrightSsoClient implements AutoCloseable {
             }
         }
         log.info("[SSO] logged out of the '" + consoleContext + "' console");
+    }
+
+    /** Waits for the logout callback after Playwright reports a redirect-induced navigation abort. */
+    private void waitForLogoutNavigationOutcome(String consoleContext, int trailMark, int timeoutMs) {
+        String callback = "/" + consoleContext + "/services/auth/callback/logout";
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        // CHECKSTYLE:OFF deadlineLoop - browser navigation synchronization; condition-based Playwright poll
+        while (System.currentTimeMillis() < deadline) {
+            // CHECKSTYLE:ON
+            java.util.List<String> all = new java.util.ArrayList<>(docTrail);
+            int from = Math.min(trailMark, all.size());
+            if (all.subList(from, all.size()).stream().anyMatch(hop -> hop.contains(callback))) {
+                try {
+                    page.waitForLoadState(com.microsoft.playwright.options.LoadState.LOAD,
+                            new Page.WaitForLoadStateOptions().setTimeout(5000));
+                } catch (RuntimeException ignored) {
+                    // The callback itself is the terminal redirect evidence; downstream assertions validate the
+                    // callback and session state, so a late load-state notification is not a separate failure.
+                }
+                return;
+            }
+            try {
+                page.waitForTimeout(500);
+            } catch (RuntimeException ignored) {
+                // The page may be replaced during the federated chain; continue checking the response trail.
+            }
+        }
+        throw new AssertionError("console '" + consoleContext + "' logout did not reach its callback after "
+                + "ERR_ABORTED within " + timeoutMs + "ms. " + pageDiagnostic());
+    }
+
+    private static boolean isRedirectAborted(PlaywrightException exception) {
+        return exception.getMessage() != null && exception.getMessage().contains("net::ERR_ABORTED");
     }
 
     /** Requires the logout flow to return through the console's registered logout callback. */

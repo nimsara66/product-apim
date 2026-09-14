@@ -38,6 +38,7 @@ import org.wso2.carbon.automation.test.utils.http.client.HttpResponse;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -306,6 +307,62 @@ public class WebSubInvocationSteps {
             Assert.assertEquals(response.getResponseCode(), 200, "WebSub event " + i + " of " + times
                     + " was not accepted by the event receiver; response: " + response.getData());
         }
+    }
+
+    /**
+     * Establishes a positive, delivery-side barrier before a scenario starts its measured event burst.
+     *
+     * <p>The persisted subscription check cannot prove that the Gateway's in-memory fan-out map has converged. A
+     * distributed Gateway can therefore accept a publish with 200 while cloning to zero subscribers. This step is an
+     * explicit, opt-in containment for scenarios that need to run against that product behaviour: it publishes a
+     * unique probe until the callback observes it, settles the probe deliveries, and clears the receiver before the
+     * scenario's actual event count begins. It deliberately does not alter the shared publish or subscribe steps.
+     *
+     * <p>This is not a replacement for the product fix. The product should eventually make the subscribe response
+     * wait for Gateway fan-out readiness. The positive delivery barrier only prevents the known asynchronous window
+     * from consuming the scenario's measured events while keeping the actual five-event assertion intact.
+     */
+    @When("I establish WebSub fan-out readiness for receiver {string} at gateway context {string} topic {string} "
+            + "signed with secret {string} within {int} seconds")
+    public void establishWebSubFanoutReadiness(String receiverKey, String context, String topic, String secret,
+                                                int timeoutSeconds) throws Exception {
+
+        String receiverName = TestContext.resolve(receiverKey).toString();
+        int initialCount = readReceiver(receiverName).getInt("count");
+        String body = "{\"__integration_v2_websub_readiness\":\""
+                + UUID.randomUUID() + "\"}";
+        String resolvedTopic = Utils.resolveContextPlaceholders(topic);
+        String receiverUrl = eventReceiverUrl(context, resolvedTopic);
+        String signature = HmacTestUtils.hubSignature("SHA1", body,
+                Utils.resolveContextPlaceholders(secret));
+
+        Integer reached = Utils.retryUntil(timeoutSeconds * 1000L,
+                () -> {
+                    HttpResponse response = Requests.post(receiverUrl, signatureHeaders(signature), body,
+                            Constants.CONTENT_TYPES.APPLICATION_JSON);
+                    Assert.assertNotNull(response, "WebSub readiness probe did not receive a response from "
+                            + receiverUrl);
+                    Assert.assertEquals(response.getResponseCode(), 200,
+                            "WebSub readiness probe was not accepted by " + receiverUrl + "; response: "
+                                    + response.getData());
+                    return readReceiver(receiverName).getInt("count");
+                }, count -> count > initialCount);
+
+        Assert.assertNotNull(reached, "WebSub fan-out readiness probe never completed for receiver '"
+                + receiverName + "' within " + timeoutSeconds + " seconds; last observed count was "
+                + (reached == null ? "unavailable" : reached));
+        Assert.assertTrue(reached > initialCount, "WebSub fan-out readiness probe did not reach receiver '"
+                + receiverName + "'; initial count=" + initialCount + ", observed=" + reached);
+
+        Utils.SettledCount settled = Utils.awaitSettledCount(DELIVERY_SETTLE_QUIET_MILLIS,
+                timeoutSeconds * 1000L, () -> readReceiver(receiverName).getInt("count"));
+        Assert.assertTrue(settled.settled(), "WebSub readiness probe deliveries for receiver '" + receiverName
+                + "' did not settle (last seen " + settled.value() + " over " + settled.samples()
+                + " sample(s), quiet window " + DELIVERY_SETTLE_QUIET_MILLIS + "ms)");
+
+        resetReceiver(receiverName);
+        log.info("WebSub fan-out readiness established for receiver '" + receiverName + "' at " + receiverUrl
+                + " after probe count reached " + settled.value() + "; receiver state was reset before the measured burst");
     }
 
     /**
@@ -787,5 +844,15 @@ public class WebSubInvocationSteps {
                 "Failed to read the WebSub receiver introspection at " + url + "; got="
                         + (response == null ? "null" : response.getResponseCode() + "/" + response.getData()));
         return new JSONObject(response.getData());
+    }
+
+    /** Clears only the test receiver's recorded state; it does not unsubscribe the callback from the Gateway. */
+    private static void resetReceiver(String name) throws IOException {
+        String url = Utils.getNodeBackendUrl(WEBSUB_RECEIVER_PORT) + "/events/" + name + "/reset";
+        HttpResponse response = SimpleHTTPClient.getInstance().doPost(url, new HashMap<>(), "",
+                Constants.CONTENT_TYPES.APPLICATION_JSON);
+        Assert.assertTrue(response != null && response.getResponseCode() == 200,
+                "Failed to reset WebSub receiver '" + name + "' at " + url + "; got="
+                        + (response == null ? "null" : response.getResponseCode() + "/" + response.getData()));
     }
 }

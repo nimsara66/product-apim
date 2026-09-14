@@ -528,69 +528,33 @@ public class PublisherBaseSteps {
         Map<String, String> headers = new HashMap<>();
         headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION,
                 "Bearer " + Identity.publisherToken());
-        // The Publish lifecycle-change POST can transiently fail (or be briefly rejected while a just-completed
-        // deploy settles) under parallel load on the shared container. This response used to be ignored, so a
-        // failed publish was SWALLOWED: the API silently stayed in Created and surfaced later as a misleading
-        // "did not reach Published" at the following lifecycle-status assertion. Retry the POST until it succeeds
-        // (200) — or until the API is already Published, since a re-POST on an already-published API can fault —
-        // catching only transient IOException, then assert. On success the final 200 is published as httpResponse
-        // for any following "The response status code should be 200".
         String url = Utils.getChangeLifecycleURL(Utils.getBaseUrl(), resourceType, actualResourceId, "Publish", null);
-        long endTimeStart = System.currentTimeMillis();
-        long endTime = endTimeStart + Constants.RUNTIME_PROPAGATION_TIMEOUT;
-        HttpResponse publishResponse = null;
-        boolean published = false;
-        while (true) {
-            try {
-                publishResponse = Requests.post(url, headers, null, null);
-                if (publishResponse != null && publishResponse.getResponseCode() == 200) {
-                    published = true;
-                    break;
-                }
-            } catch (IOException transientFailure) {
-                // transient — fall through to the state check / retry
-            }
-            // The POST may have applied despite a lost/failed response; treat an already-Published API as success.
-            if ("Published".equals(currentApiLifecycleState(actualResourceId, headers))) {
-                published = true;
-                break;
-            }
-            if (System.currentTimeMillis() >= endTime) {
-                break;
-            }
-            try {
-                Utils.pollPause(endTimeStart, Constants.RETRY_INTERVAL_TIME);
-            } catch (InterruptedException ignored) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-        }
-        Assert.assertTrue(published, "Publish lifecycle-change did not succeed for " + resourceType + " "
-                + actualResourceId + " within the deadline; last response: "
-                + (publishResponse == null ? "null"
-                : publishResponse.getResponseCode() + " / " + publishResponse.getData()));
+        HttpResponse publishResponse = Requests.post(url, headers, null, null);
+        Assert.assertNotNull(publishResponse, "Publish lifecycle-change returned no response for " + actualResourceId);
+        Assert.assertEquals(publishResponse.getResponseCode(), 200,
+                "Publish lifecycle-change failed for " + actualResourceId + ": " + publishResponse.getData());
+        TestContext.set("httpResponse", publishResponse);
     }
 
     /**
      * Publishes the resource and then waits until the lifecycle state has actually reached {@code Published},
-     * re-firing the Publish action if the transition was lost. The opt-in variant of
-     * {@code I publish the "apis" resource with id}, which asserts only the POST's status.
+     * re-firing the Publish action if the transition was lost. This is the opt-in variant for scenarios where
+     * the shared distributed runtime has demonstrated an at-most-once lifecycle event race.
      *
      * <p>A 200 from the lifecycle-change POST means no exception was thrown, not that the state moved, so this
-     * gates on a read-back. It distinguishes four outcomes: the target state (done); the source state (lost —
-     * re-POST); a pending {@code AM_API_STATE} approval task (fails, naming the task, since the state is waiting
-     * on approval rather than on propagation); and an unexpected state, 401/403 or a rejected re-POST (fails
-     * immediately). Every re-fire is logged.
+     * step gates on a read-back. It distinguishes the target state, a lost transition from {@code Created}, a
+     * pending workflow approval task, and invalid/authentication states. Publish is re-fired only while the API
+     * is still {@code Created} and no workflow task is blocking the transition.</p>
      */
     @When("I publish the {string} resource with id {string}, healing if the transition is lost")
     public void iPublishTheResourceHealingLostTransition(String resourceType, String resourceId) throws Exception {
 
         String actualResourceId = TestContext.resolve(resourceId).toString();
         Map<String, String> headers = new HashMap<>();
-        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + Identity.publisherToken());
+        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION,
+                "Bearer " + Identity.publisherToken());
         String url = Utils.getChangeLifecycleURL(Utils.getBaseUrl(), resourceType, actualResourceId, "Publish", null);
 
-        // Fire once up front so the healthy path is a single POST, exactly like the plain step.
         HttpResponse first = Requests.post(url, headers, null, null);
         if (first != null && (first.getResponseCode() == 401 || first.getResponseCode() == 403)) {
             Assert.fail("Publish of " + actualResourceId + " was rejected with " + first.getResponseCode()
@@ -599,61 +563,63 @@ public class PublisherBaseSteps {
 
         HealGate.awaitOrHeal("Published state of " + resourceType + " " + actualResourceId,
                 () -> {
-                    HttpResponse lc = SimpleHTTPClient.getInstance()
+                    HttpResponse lifecycleResponse = SimpleHTTPClient.getInstance()
                             .doGet(Utils.getAPILifecycleStateURL(Utils.getBaseUrl(), actualResourceId), headers);
-                    if (lc == null) {
+                    if (lifecycleResponse == null) {
                         return new HealGate.NotReady("no response from lifecycle-state");
                     }
-                    int code = lc.getResponseCode();
+                    int code = lifecycleResponse.getResponseCode();
                     if (code == 401 || code == 403) {
                         return new HealGate.Fatal("lifecycle-state read returned " + code
                                 + " — credentials/scope, not propagation");
                     }
                     if (code >= 500) {
                         return new HealGate.Fatal("lifecycle-state read returned " + code
-                                + " (already past the client's transient 900967 retry): " + lc.getData());
+                                + " (already past the client's transient 900967 retry): "
+                                + lifecycleResponse.getData());
                     }
-                    if (code != 200 || lc.getData() == null || lc.getData().isBlank()) {
+                    if (code != 200 || lifecycleResponse.getData() == null
+                            || lifecycleResponse.getData().isBlank()) {
                         return new HealGate.NotReady("HTTP " + code + " from lifecycle-state");
                     }
-                    String state = new JSONObject(lc.getData()).optString("state", null);
-                    if (APIConstants_PUBLISHED.equalsIgnoreCase(state)) {
+                    String state = new JSONObject(lifecycleResponse.getData()).optString("state", null);
+                    if ("Published".equalsIgnoreCase(state)) {
                         return new HealGate.Ready();
                     }
                     if (!"Created".equalsIgnoreCase(state)) {
-                        return new HealGate.Fatal("lifecycle state is '" + state + "', neither the source state "
-                                + "nor Published — something else moved this API, so re-publishing is wrong");
+                        return new HealGate.Fatal("lifecycle state is '" + state
+                                + "', neither Created nor Published — re-publishing is unsafe");
                     }
                     String pending = pendingApiStateWorkflowReference(actualResourceId);
                     if (pending != null) {
-                        return new HealGate.Fatal("a PENDING AM_API_STATE workflow task (" + pending + ") is "
-                                + "blocking the transition: APIProviderImpl only changes the lifecycle once the "
-                                + "workflow is APPROVED, so the 200 was a silent no-op. Not a lost event — approve "
-                                + "or clear the task.");
+                        return new HealGate.Fatal("a PENDING AM_API_STATE workflow task (" + pending
+                                + ") is blocking the transition; re-publishing is not the correct recovery");
                     }
                     return new HealGate.NotReady("state=Created");
                 },
                 attempt -> {
-                    logger.warn("self-heal: re-POSTing Publish for {} {} — the previous 200 did not persist",
+                    logger.warn("self-heal: re-POSTing Publish for {} {} — previous transition did not persist",
                             resourceType, actualResourceId);
-                    HttpResponse again = SimpleHTTPClient.getInstance().doPost(url, headers, "",
+                    HttpResponse retrigger = SimpleHTTPClient.getInstance().doPost(url, headers, "",
                             Constants.CONTENT_TYPES.APPLICATION_JSON);
-                    if (again != null && again.getResponseCode() == 400) {
-                        return new HealGate.Fatal("re-POST of Publish returned 400 (action not allowed from the "
-                                + "current state): " + again.getData());
+                    if (retrigger != null && (retrigger.getResponseCode() == 401
+                            || retrigger.getResponseCode() == 403)) {
+                        return new HealGate.Fatal("re-POST of Publish returned " + retrigger.getResponseCode()
+                                + ": " + retrigger.getData());
                     }
-                    return new HealGate.Ready();
+                    if (retrigger != null && retrigger.getResponseCode() == 400) {
+                        return new HealGate.Fatal("re-POST of Publish returned 400 (action not allowed from the"
+                                + " current state): " + retrigger.getData());
+                    }
+                    return new HealGate.NotReady("Publish re-triggered");
                 },
                 3);
     }
 
-    /** {@code Published} — inlined so this file needs no product-constant dependency. */
-    private static final String APIConstants_PUBLISHED = "Published";
-
     /**
-     * The {@code externalWorkflowReference} of a PENDING API-state workflow task for this API, or null. Read as
-     * the acting actor's admin token; a non-200 (e.g. no admin scope) yields null so the caller keeps treating the
-     * state as merely unpropagated rather than inventing a diagnosis.
+     * Finds a pending API lifecycle workflow task, when workflow administration is available to the acting user.
+     * A pending approval is a business-state blocker, not a propagation delay, so the healing gate must not replay
+     * the Publish action in that case.
      */
     private String pendingApiStateWorkflowReference(String apiId) {
         try {
@@ -670,22 +636,22 @@ public class PublisherBaseSteps {
             JSONArray tasks = new JSONObject(list.getData()).optJSONArray("list");
             for (int i = 0; tasks != null && i < tasks.length(); i++) {
                 JSONObject task = tasks.getJSONObject(i);
-                if (apiId.equals(task.optJSONObject("properties") == null ? null
-                        : task.getJSONObject("properties").optString("apiId", null))
-                        || (task.optString("description", "").contains(apiId))) {
+                JSONObject properties = task.optJSONObject("properties");
+                if (apiId.equals(properties == null ? null : properties.optString("apiId", null))
+                        || task.optString("description", "").contains(apiId)) {
                     return task.optString("externalWorkflowReference", "unknown-reference");
                 }
             }
         } catch (Exception ignored) {
-            // Diagnosis is best-effort: never turn a failed lookup into a misleading verdict.
+            // Best-effort diagnosis; an unavailable workflow endpoint must not hide the lifecycle result.
         }
         return null;
     }
 
     /**
      * Reads an API's current lifecycle state (e.g. {@code Created}/{@code Published}) via a direct GET that is
-     * NOT published as {@code httpResponse} — an intermediate read consumed locally by the publish retry loop.
-     * Returns {@code null} on any non-2xx/empty/transient response so the caller keeps polling.
+     * NOT published as {@code httpResponse} — an intermediate read used by lifecycle transition helpers.
+     * Returns {@code null} on any non-2xx/empty/transient response.
      */
     private String currentApiLifecycleState(String apiId, Map<String, String> headers) {
         try {

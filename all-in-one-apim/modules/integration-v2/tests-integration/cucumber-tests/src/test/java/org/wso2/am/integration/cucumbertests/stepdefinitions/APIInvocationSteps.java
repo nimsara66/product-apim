@@ -93,42 +93,32 @@ public class APIInvocationSteps {
     private HttpResponse execute(CurlOption.HttpMethod method, String endpointUrl, Map<String, String> headers,
                                  String payload, String contentType, boolean rawGet) throws IOException {
 
-        TestContext.remove(HTTP_RESPONSE_KEY);
-        SimpleHTTPClient client = SimpleHTTPClient.getInstance();
-        HttpResponse response;
-        if (rawGet) {
-            // GET with the client's URI normalization DISABLED, so a percent-encoded path segment reaches the
-            // gateway verbatim; method/payload/contentType are unused on this path.
-            response = client.doGetRaw(endpointUrl, headers);
-        } else {
+        return Requests.execute(() -> {
+            SimpleHTTPClient client = SimpleHTTPClient.getInstance();
+            if (rawGet) {
+                // GET with the client's URI normalization DISABLED, so a percent-encoded path segment reaches the
+                // gateway verbatim; method/payload/contentType are unused on this path.
+                return client.doGetRaw(endpointUrl, headers);
+            }
             switch (method) {
                 case GET:
-                    response = client.doGet(endpointUrl, headers);
-                    break;
+                    return client.doGet(endpointUrl, headers);
                 case DELETE:
-                    response = client.doDelete(endpointUrl, headers);
-                    break;
+                    return client.doDelete(endpointUrl, headers);
                 case POST:
-                    response = client.doPost(endpointUrl, headers, payload, contentType);
-                    break;
+                    return client.doPost(endpointUrl, headers, payload, contentType);
                 case PUT:
-                    response = client.doPut(endpointUrl, headers, payload, contentType);
-                    break;
+                    return client.doPut(endpointUrl, headers, payload, contentType);
                 case PATCH:
-                    response = client.doPatch(endpointUrl, headers, payload, contentType);
-                    break;
+                    return client.doPatch(endpointUrl, headers, payload, contentType);
                 case HEAD:
-                    response = client.doHead(endpointUrl, headers);
-                    break;
+                    return client.doHead(endpointUrl, headers);
                 case OPTIONS:
-                    response = client.doOptions(endpointUrl, headers);
-                    break;
+                    return client.doOptions(endpointUrl, headers);
                 default:
                     throw new IllegalArgumentException("Unsupported HTTP method for invocation: " + method);
             }
-        }
-        TestContext.set(HTTP_RESPONSE_KEY, response);
-        return response;
+        });
     }
 
     /** {@link #execute(CurlOption.HttpMethod, String, Map, String, String, boolean)} for a normalized request. */

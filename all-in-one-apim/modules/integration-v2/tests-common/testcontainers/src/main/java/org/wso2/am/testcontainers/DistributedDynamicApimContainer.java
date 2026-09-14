@@ -405,6 +405,7 @@ public class DistributedDynamicApimContainer implements ApimRuntime {
         GenericContainer<?> container = new GenericContainer<>(image)
                 .withNetwork(network)
                 .withNetworkAliases(alias)
+                .withExtraHost("host.docker.internal", "host-gateway")
                 .withExposedPorts(exposedPorts)
                 .withCopyToContainer(Transferable.of(toml, 0666), TOML_PATH)
                 .withCommand("-DportOffset=" + portOffset)

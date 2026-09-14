@@ -365,7 +365,7 @@ Feature: Gateway AI API Invocation
     Then The response status code should be 200
     When I deploy the API with id "aiCopyApiId"
     Then The response status code should be 201
-    When I publish the "apis" resource with id "aiCopyApiId"
+    When I publish the "apis" resource with id "aiCopyApiId", healing if the transition is lost
     Then The lifecycle status of API "aiCopyApiId" should be "Published"
     When I have set up application with keys, subscribed to API "aiCopyApiId" with plan "Unlimited", and obtained access token for "aiCopySubId"
     Then The response status code should be 200

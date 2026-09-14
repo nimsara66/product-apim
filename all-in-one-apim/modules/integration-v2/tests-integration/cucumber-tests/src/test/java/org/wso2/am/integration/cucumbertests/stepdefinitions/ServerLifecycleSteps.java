@@ -50,7 +50,20 @@ public class ServerLifecycleSteps {
 
         // Restart the component that serves Gateway traffic. In all-in-one this resolves to the same unified
         // APIM URL; in distributed topology it resolves to the Gateway management listener rather than CP.
-        String baseUrl = Utils.getBaseGatewayManagementUrl();
+        restartGracefully(Utils.getBaseGatewayManagementUrl());
+    }
+
+    /** Gracefully restarts the distributed Control Plane, or the unified APIM server in all-in-one topology. */
+    @When("I gracefully restart the Control Plane")
+    public void iGracefullyRestartTheControlPlane() throws Exception {
+        restartGracefully(Utils.getBaseUrl(), true);
+    }
+
+    private void restartGracefully(String baseUrl) throws Exception {
+        restartGracefully(baseUrl, false);
+    }
+
+    private void restartGracefully(String baseUrl, boolean controlPlane) throws Exception {
         String endpoint = baseUrl + "services/ServerAdmin.ServerAdminHttpsSoap11Endpoint/";
 
         String soapBody = "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" "
@@ -78,7 +91,9 @@ public class ServerLifecycleSteps {
         Assert.assertTrue(response.getData().contains("<ns:return>true</ns:return>"),
                 "ServerAdmin restartGracefully did not return true; response: " + response.getData());
 
-        boolean restarted = ServerReadiness.awaitRestart(baseUrl);
+        boolean restarted = controlPlane
+                ? ServerReadiness.awaitControlPlaneRestart(baseUrl)
+                : ServerReadiness.awaitRestart(baseUrl);
         Assert.assertTrue(restarted, "APIM server did not come back ready within "
                 + (Constants.SERVER_STARTUP_WAIT_TIME / 1000) + "s after a graceful restart");
     }

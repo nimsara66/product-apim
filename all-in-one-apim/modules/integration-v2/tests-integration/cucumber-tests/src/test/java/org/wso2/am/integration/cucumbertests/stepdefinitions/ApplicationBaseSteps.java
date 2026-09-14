@@ -75,6 +75,9 @@ import java.util.stream.IntStream;
 public class ApplicationBaseSteps {
 
     private static final Log log = LogFactory.getLog(ApplicationBaseSteps.class);
+    private static final int FRESH_APPLICATION_KEY_GENERATION_ATTEMPTS = 3;
+    private static final long STALE_KEY_MAPPING_CLEANUP_TIMEOUT_MILLIS = 30000L;
+    private static final long STALE_KEY_MAPPING_CLEANUP_POLL_INTERVAL_MILLIS = 2000L;
 
     BaseSteps baseSteps = new BaseSteps();
 
@@ -1973,12 +1976,123 @@ public class ApplicationBaseSteps {
         // Only extract key fields on success — a non-2xx (e.g. a KM that denies the user's role → 403) has no
         // consumerKey, and extracting it would throw before the feature can assert the rejection status.
         if (response.getResponseCode() >= 200 && response.getResponseCode() < 300) {
-            TestContext.set("consumerKey", Utils.extractValueFromPayload(response.getData(), "consumerKey"));
-            TestContext.set("consumerSecret", Utils.extractValueFromPayload(response.getData(), "consumerSecret"));
-            Object keyMappingId = Utils.extractValueFromPayload(response.getData(), "keyMappingId");
-            TestContext.set("keyMappingId", keyMappingId);
-            ResourceCleanup.registerApplicationKeyMapping(actualAppId, keyMappingId);
+            storeGeneratedClientCredentials(actualAppId, response);
         }
+    }
+
+    /**
+     * Generates credentials for an application that was just created and explicitly opts into recovery of the
+     * partial key-mapping state produced by the known non-atomic key-generation failure. This must not be folded
+     * into the generic generation step: other scenarios intentionally generate multiple mappings or assert that a
+     * failed generation leaves its partial mapping behind.
+     *
+     * <p>The fresh-application precondition makes cleanup safe here. If the initial request results in a 409, this
+     * step expects exactly one mapping to have appeared, removes that mapping through the product's cleanup
+     * endpoint, waits for the deletion to be observable, and retries the generation a bounded number of times.</p>
+     */
+    @When("I generate client credentials for fresh application id {string} with payload {string}, retrying on 409 stale mapping conflicts")
+    public void iGenerateClientCredentialsForFreshApplicationWithRecovery(String appId, String payload) throws Exception {
+
+        String actualAppId = TestContext.resolve(appId).toString();
+        String jsonPayload = Utils.resolveContextPlaceholders(TestContext.resolve(payload).toString());
+
+        Map<String, String> headers = new HashMap<>();
+        headers.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + Identity.devportalToken());
+
+        JSONArray mappingsBeforeGeneration = readApplicationKeyMappings(actualAppId, headers);
+        Assert.assertTrue(mappingsBeforeGeneration.isEmpty(),
+                "Fresh application " + actualAppId + " already has " + mappingsBeforeGeneration.length()
+                        + " OAuth key mapping(s); refusing stale-mapping recovery");
+
+        HttpResponse response = null;
+        for (int attempt = 1; attempt <= FRESH_APPLICATION_KEY_GENERATION_ATTEMPTS; attempt++) {
+            response = Requests.post(Utils.getGenerateApplicationKeysURL(Utils.getBaseUrl(), actualAppId), headers,
+                    jsonPayload, Constants.CONTENT_TYPES.APPLICATION_JSON);
+            if (isSuccessful(response)) {
+                storeGeneratedClientCredentials(actualAppId, response);
+                return;
+            }
+
+            if (response == null || response.getResponseCode() != 409
+                    || attempt == FRESH_APPLICATION_KEY_GENERATION_ATTEMPTS) {
+                break;
+            }
+
+            JSONArray mappingsAfterConflict = readApplicationKeyMappings(actualAppId, headers);
+            Assert.assertEquals(mappingsAfterConflict.length(), 1,
+                    "Expected exactly one stale OAuth key mapping after a 409 for fresh application " + actualAppId
+                            + ", but found " + mappingsAfterConflict.length());
+            String staleKeyMappingId = mappingsAfterConflict.getJSONObject(0).optString("keyMappingId", null);
+            Assert.assertNotNull(staleKeyMappingId,
+                    "The OAuth key mapping created during recovery for application " + actualAppId
+                            + " did not contain a keyMappingId");
+
+            log.warn("Recovering stale OAuth key mapping " + staleKeyMappingId + " for fresh application "
+                    + actualAppId + " after key generation attempt " + attempt + " returned 409");
+            HttpResponse cleanupResponse = Requests.post(
+                    Utils.getCleanupRegistrationURL(Utils.getBaseUrl(), actualAppId, staleKeyMappingId), headers, "",
+                    Constants.CONTENT_TYPES.APPLICATION_JSON);
+            Assert.assertTrue(isSuccessful(cleanupResponse),
+                    "Failed to clean up stale OAuth key mapping " + staleKeyMappingId + " for application "
+                            + actualAppId + ". Status: " + responseSummary(cleanupResponse));
+
+            JSONArray remainingMappings = Utils.retryUntilWithInterval(STALE_KEY_MAPPING_CLEANUP_TIMEOUT_MILLIS,
+                    STALE_KEY_MAPPING_CLEANUP_POLL_INTERVAL_MILLIS,
+                    () -> readApplicationKeyMappings(actualAppId, headers), JSONArray::isEmpty);
+            Assert.assertNotNull(remainingMappings,
+                    "Could not verify cleanup of stale OAuth key mapping " + staleKeyMappingId + " for application "
+                            + actualAppId);
+            Assert.assertTrue(remainingMappings.isEmpty(),
+                    "Stale OAuth key mapping " + staleKeyMappingId + " still exists for application " + actualAppId
+                            + " after cleanup timeout");
+        }
+
+        Assert.assertTrue(isSuccessful(response),
+                "Client credential generation with stale-mapping recovery failed for fresh application "
+                        + actualAppId + " after " + FRESH_APPLICATION_KEY_GENERATION_ATTEMPTS + " attempt(s). Status: "
+                        + responseSummary(response));
+    }
+
+    private void storeGeneratedClientCredentials(String actualAppId, HttpResponse response) throws IOException {
+
+        TestContext.set("consumerKey", Utils.extractValueFromPayload(response.getData(), "consumerKey"));
+        TestContext.set("consumerSecret", Utils.extractValueFromPayload(response.getData(), "consumerSecret"));
+        Object keyMappingId = Utils.extractValueFromPayload(response.getData(), "keyMappingId");
+        TestContext.set("keyMappingId", keyMappingId);
+        ResourceCleanup.registerApplicationKeyMapping(actualAppId, keyMappingId);
+    }
+
+    private JSONArray readApplicationKeyMappings(String actualAppId, Map<String, String> headers) throws IOException {
+
+        String url = Utils.getApplicationAllKeys(Utils.getBaseUrl(), actualAppId);
+        HttpResponse response = SimpleHTTPClient.getInstance().doGet(url, headers);
+        if (response == null) {
+            throw new IOException("No response while reading OAuth key mappings for application " + actualAppId);
+        }
+        if (response.getResponseCode() < 200 || response.getResponseCode() >= 300) {
+            throw new IOException("Unexpected status while reading OAuth key mappings for application " + actualAppId
+                    + ": " + responseSummary(response));
+        }
+        if (response.getData() == null || response.getData().trim().isEmpty()) {
+            throw new IOException("Empty response while reading OAuth key mappings for application " + actualAppId);
+        }
+
+        try {
+            JSONArray mappings = new JSONObject(response.getData()).optJSONArray("list");
+            return mappings == null ? new JSONArray() : mappings;
+        } catch (JSONException e) {
+            throw new IOException("Invalid OAuth key mapping response for application " + actualAppId, e);
+        }
+    }
+
+    private static boolean isSuccessful(HttpResponse response) {
+
+        return response != null && response.getResponseCode() >= 200 && response.getResponseCode() < 300;
+    }
+
+    private static String responseSummary(HttpResponse response) {
+
+        return response == null ? "no response" : response.getResponseCode() + " " + response.getData();
     }
 
     /**

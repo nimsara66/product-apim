@@ -427,6 +427,7 @@
         <parameter name="blockLabel" value="distributed-logging"/>
         <parameter name="initTenantUsers" value="true"/>
         <parameter name="initBackend" value="true"/>
+        <parameter name="tomlExtraOverlayPath.cp" value="src/test/resources/artifacts/configFiles/logging/distributed-gateway-overlay.toml"/>
         <parameter name="tomlExtraOverlayPath.gateway" value="src/test/resources/artifacts/configFiles/logging/distributed-gateway-overlay.toml"/>
         <classes>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.AnalyticsCorrelationLoggingRunner"/>

@@ -237,6 +237,9 @@ Feature: Gateway WebSub API Invocation
     When I send a WebSub "subscribe" request as form data to gateway context "{{websubContext}}/1.0.0" with callback "{{websubReceiverCallback}}" topic "_default" secret "{{websubSubscriberSecret}}" lease seconds "50000000" using access token "generatedAccessToken" until response status code becomes 202 within 60 seconds
     # The URL the publishes below post to is the one the hub recorded — otherwise a 200 could not mean fan-out ran
     Then The event receiver URL for gateway context "{{websubContext}}/1.0.0" topic "_default" should match the persisted webhook subscription of API "websubApiId"
+    # The persisted row proves control-plane state only. Establish a delivery-side barrier for this known distributed
+    # topology race, then clear the probe before measuring the five scenario events.
+    And I establish WebSub fan-out readiness for receiver "websubReceiver" at gateway context "{{websubContext}}/1.0.0" topic "_default" signed with secret "{{websubApiSecret}}" within 60 seconds
     When I publish the WebSub event "websubEventBody" to the event receiver at gateway context "{{websubContext}}/1.0.0" topic "_default" signed with secret "{{websubApiSecret}}" until response status code becomes 200 within 60 seconds
     And I publish the WebSub event "websubEventBody" to the event receiver at gateway context "{{websubContext}}/1.0.0" topic "_default" signed with secret "{{websubApiSecret}}" 4 times expecting status 200
     Then The WebSub receiver "websubReceiver" should have received 5 events within 60 seconds

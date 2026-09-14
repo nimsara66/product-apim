@@ -188,6 +188,7 @@ Feature: Correlation Logging Configuration
     # LogsHandler constructor emits that line unconditionally at every boot, whatever the component settings,
     # so it only ever proved the server came back, never that anything persisted.
     When I mark the current end of the control-plane server log file "correlation.log"
+    When I gracefully restart the Control Plane
     And I retrieve all APIs created through the Publisher REST API
     Then The response status code should be 200
     And The control-plane server log file "correlation.log" should gain a line containing "|HTTP-In-Request|" within 60 seconds

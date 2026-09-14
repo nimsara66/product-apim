@@ -34,6 +34,7 @@ import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.testng.Assert;
 import org.wso2.am.integration.cucumbertests.utils.Identity;
 import org.wso2.am.integration.cucumbertests.utils.Names;
+import org.wso2.am.integration.cucumbertests.utils.ResourceCleanup;
 import org.wso2.am.integration.cucumbertests.utils.ServerReadiness;
 import org.wso2.am.integration.cucumbertests.utils.TestContext;
 import org.wso2.am.integration.test.utils.Constants;
@@ -105,17 +106,27 @@ public class BaseSteps {
     @When("I have a valid DCR application as {string}")
     public void iHaveADCRApplicationAs(String actorRef) throws IOException {
 
-        createDcrApplication(Identity.resolveActor(actorRef));
+        createDcrApplication(Identity.resolveActor(actorRef), actorRef);
     }
 
     private void createDcrApplication(User actor) throws IOException {
+
+        createDcrApplication(actor, Identity.actingActorRef());
+    }
+
+    private void createDcrApplication(User actor, String ownerActorRef) throws IOException {
 
         //Create json payload for DCR endpoint. The DCR client name must adhere to ^[\sa-zA-Z0-9._-]*$ — a
         // secondary-store actor's username carries the store-domain separator (e.g. SECONDARY.COM/secondaryAdmin1),
         // whose '/' is outside that set, so sanitize any disallowed char to '_' when DERIVING the name. This is
         // cosmetic only: the actual OAuth identity is the untouched `owner` (actor.getUserName()) below.
-        String clientNameSafe = ("integration_test_app_" + actor.getUserNameWithoutDomain() + "_"
+        // The DCR client is scenario-owned. A deterministic actor-only name would make every scenario/runners share
+        // one OAuth client, and APIM can return that client's still-active access token with its remaining lifetime
+        // instead of minting a fresh 3600-second token. Keep this generated name stable for the bounded DCR retry
+        // below, but make each registration invocation unique across parallel runners and scenarios.
+        String clientNameBase = ("integration_test_app_" + actor.getUserNameWithoutDomain() + "_"
                 + actor.getUserDomain()).replaceAll("[^\\sa-zA-Z0-9._-]", "_");
+        String clientNameSafe = Names.unique(clientNameBase);
         JsonObject json = new JsonObject();
         json.addProperty("callbackUrl", "test.com");
         json.addProperty("clientName", clientNameSafe);
@@ -132,10 +143,10 @@ public class BaseSteps {
         // The gateway health-check can pass before the client-registration webapp finishes deploying, so a
         // DCR POST fired immediately after boot can hit a transient 500 "Dynamic Client Registration Service
         // not available" — a race that parallel runners sharing one freshly-booted container widen. Retrying
-        // the POST blindly is safe for THIS endpoint: DCR is an idempotent upsert keyed on clientName (which
-        // is deterministic per actor above — every token acquisition re-POSTs it and receives the existing
-        // client back), so even a create that committed server-side with a lost response just returns the
-        // same client on the retry. Retry until 200 or the startup window elapses, mirroring
+        // the POST blindly is safe for THIS endpoint: DCR is an idempotent upsert keyed on clientName, and the
+        // generated name remains stable across retries within this registration invocation. Therefore, even if
+        // a create committed server-side with a lost response, the retry returns the same client. Retry until
+        // 200 or the startup window elapses, mirroring
         // TenantUserProvisioner.awaitTenantMgtServiceReady for the admin services.
         String dcrUrl = Utils.getDCREndpointURL(getBaseUrl());
         long deadlineStart = System.currentTimeMillis();
@@ -176,6 +187,10 @@ public class BaseSteps {
                 .getBytes(StandardCharsets.UTF_8));
 
         TestContext.set(Identity.dcrCredentialsKey(actor), dcrCredentials);
+        // DCR clients are standalone OAuth service providers; application cleanup does not remove them. Register the
+        // client immediately after a successful response, preserving the explicit owner for tenant-scoped SOAP
+        // deregistration. A null owner reference correctly means the super-tenant admin.
+        ResourceCleanup.registerFor(ResourceCleanup.CREATED_DCR_CLIENT_IDS, clientId, ownerActorRef);
     }
 
     /**
