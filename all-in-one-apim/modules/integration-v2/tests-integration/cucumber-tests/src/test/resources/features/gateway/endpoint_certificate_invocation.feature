@@ -44,6 +44,11 @@ Feature: Gateway Endpoint Certificate TLS Invocation
     # block's overlay shortens to about a minute; hence the longer window here.
     When I upload endpoint certificate "<certificatePath>" with alias "{{tlsCertAlias}}" for endpoint "<backendUrl>"
     Then The response status code should be 201
+    # The gateway learns about the upload through a single at-most-once event, and the product drops it whenever
+    # its trust-store read races the control plane's trust-store write. Waiting longer cannot recover that (the
+    # product stops retrying and never tries again) — only re-firing the upload can, so the prerequisite gets its
+    # own self-healing gate. The 200 below stays the assertion; this only makes sure the fixture exists first.
+    And the endpoint certificate "{{tlsCertAlias}}" should be trusted by the gateway at context "{{tlsCertApiContext}}/1.0.0/customers/123/" with access token "generatedAccessToken", re-uploading if propagation is lost
     When I invoke the API at gateway context "{{tlsCertApiContext}}/1.0.0/customers/123/" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 240 seconds
     Then The response status code should be 200
     # The BACKEND's body, so a gateway-generated 200 (a CORS/fault response, a cached error page) cannot pass.

@@ -22,11 +22,14 @@ import io.cucumber.java.en.When;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.testng.Assert;
+import org.wso2.am.integration.cucumbertests.utils.ContainerLogDiagnostics;
+import org.wso2.am.integration.cucumbertests.utils.HealGate;
 import org.wso2.am.integration.cucumbertests.utils.Identity;
 import org.wso2.am.integration.cucumbertests.utils.Requests;
 import org.wso2.am.integration.cucumbertests.utils.ResourceCleanup;
 import org.wso2.am.integration.cucumbertests.utils.TestContext;
 import org.wso2.am.integration.cucumbertests.utils.Utils;
+import org.wso2.am.integration.cucumbertests.utils.clients.SimpleHTTPClient;
 import org.wso2.am.integration.test.utils.Constants;
 import org.wso2.carbon.automation.test.utils.http.client.HttpResponse;
 
@@ -62,6 +65,25 @@ import java.util.Set;
  * registered for failure-safe teardown and swept as their creating actor by {@link ResourceCleanup}.
  */
 public class EndpointCertificateSteps {
+
+    /**
+     * Context-key prefixes remembering what an alias was uploaded FROM, so the trust gate below can re-fire the
+     * upload without the feature restating the certificate path and endpoint it already gave the upload step.
+     */
+    private static final String CERT_SOURCE_PREFIX = "endpointCertSource::";
+    private static final String CERT_ENDPOINT_PREFIX = "endpointCertEndpoint::";
+
+    /**
+     * Attempts for the gateway-trust gate: one {@link Constants#RUNTIME_PROPAGATION_TIMEOUT} window (180s) then
+     * 60s per retry, so 10 attempts budget 180 + 9*60 = 720s.
+     *
+     * <p>Sized against the PRODUCT's own retry chain, not against how long propagation normally takes (normally
+     * this gate passes in the first window, in about a second). When the certificate-deploy event is dropped, the
+     * gateway's {@code EndpointCertificateDeployer} retries a permanently unusable HTTP client for
+     * 15+30+60+120+240 = ~465s before giving up, on the JMS listener's thread. A re-fired event can therefore
+     * queue behind that chain, so the gate's total budget has to outlast it or the heal would be swallowed.
+     */
+    private static final int TRUST_GATE_ATTEMPTS = 10;
 
     private Map<String, String> publisherAuthHeaders() {
         Map<String, String> headers = new HashMap<>();
@@ -106,10 +128,163 @@ public class EndpointCertificateSteps {
     @When("I upload endpoint certificate {string} with alias {string} for endpoint {string}")
     public void iUploadEndpointCertificate(String resourcePath, String alias, String endpoint) throws IOException {
         String resolvedAlias = Utils.resolveContextPlaceholders(alias);
-        HttpResponse response = uploadCertificate(resourcePath, resolvedAlias,
-                Utils.resolveContextPlaceholders(endpoint));
+        String resolvedEndpoint = Utils.resolveContextPlaceholders(endpoint);
+        HttpResponse response = uploadCertificate(resourcePath, resolvedAlias, resolvedEndpoint);
         Assert.assertEquals(response.getResponseCode(), 201, response.getData());
         ResourceCleanup.register(ResourceCleanup.CREATED_ENDPOINT_CERTIFICATE_ALIASES, resolvedAlias);
+        // Remembered so the gateway-trust gate can re-fire this exact upload as its heal.
+        TestContext.set(CERT_SOURCE_PREFIX + resolvedAlias, resourcePath);
+        TestContext.set(CERT_ENDPOINT_PREFIX + resolvedAlias, resolvedEndpoint);
+    }
+
+    /**
+     * Waits until the GATEWAY actually trusts an uploaded endpoint certificate, re-firing the upload if the
+     * certificate-deploy event was dropped. Fixture readiness, never an assertion target — the scenario's own
+     * {@code until 200} invoke remains the assertion (CLAUDE.md §15).
+     *
+     * <p><b>Why this gate has to exist.</b> Uploading a certificate is a two-hop operation: the control plane
+     * writes it to the publisher trust store and emits an {@code ENDPOINT_CERTIFICATE_ADD} event, and the gateway
+     * consumes that event and fetches the certificate over {@code /internal/data/v1/endpoint-certificates} before
+     * adding it to its own trust store. That fetch needs an SSL context, which the product rebuilds from
+     * {@code client-truststore.jks} on every call — the very file the control plane rewrites in place. When the
+     * two overlap, the gateway reads a truncated keystore, falls back to a context with no trust manager, and
+     * burns its whole retry chain on a client that can never work. The event is at-most-once and nothing re-fires
+     * it, so the certificate never reaches the gateway and every invocation stays 500 for the rest of the run.
+     * Measured twice in two consecutive CI runs (on the super-tenant row once and the tenant row once), with the
+     * server log naming each step of the chain.
+     *
+     * <p><b>Why a longer deadline is not the fix.</b> The product stops trying after ~465s and never retries
+     * again, so waiting longer only fails later. Re-firing is the only thing that recovers it, and it recovers
+     * reliably because each event builds a FRESH client and SSL context.
+     *
+     * <p><b>Why the heal cannot mask a real defect.</b> The probe is the same invocation the scenario asserts on.
+     * A certificate that is genuinely not honoured — wrong certificate, wrong endpoint, broken trust handling —
+     * stays 500 through every re-upload and the gate fails with the observed state plus the server log evidence.
+     * Each re-fire logs the shared grep-able {@code self-heal:} line, so how often the product race actually bites
+     * stays countable in CI rather than being silently absorbed.
+     *
+     * @param alias    context-resolved alias of the certificate whose propagation is awaited
+     * @param context  gateway context path to invoke, exactly as the following assertion step invokes it
+     * @param tokenKey context key holding the access token to present
+     */
+    @Then("the endpoint certificate {string} should be trusted by the gateway at context {string} with access token {string}, re-uploading if propagation is lost")
+    public void certificateShouldBeTrustedByTheGateway(String alias, String context, String tokenKey)
+            throws Exception {
+
+        String resolvedAlias = Utils.resolveContextPlaceholders(alias);
+        String resolvedContext = Utils.resolveContextPlaceholders(context);
+        String token = TestContext.resolve(tokenKey).toString();
+        // The context already carries any /t/<tenant> prefix, so it is appended to the gateway base URL verbatim.
+        String url = Utils.getBaseGatewayUrl() + (resolvedContext.startsWith("/") ? "" : "/") + resolvedContext;
+        Map<String, String> auth = new HashMap<>();
+        auth.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + token);
+        String what = "gateway trust of endpoint certificate '" + resolvedAlias + "'";
+
+        try {
+            HealGate.awaitOrHeal(what,
+                    () -> {
+                        // Intermediate read (§7): the raw client, so the scenario's httpResponse is never clobbered
+                        // by the gate and the following assertion still reads its OWN invocation.
+                        HttpResponse r = SimpleHTTPClient.getInstance().doGet(url, auth);
+                        if (r == null) {
+                            return new HealGate.NotReady("no response from the gateway");
+                        }
+                        int code = r.getResponseCode();
+                        if (code == 200) {
+                            return new HealGate.Ready();
+                        }
+                        // 500 is the EXPECTED not-yet-trusted state: the gateway reached the backend and the TLS
+                        // handshake failed. Anything else means the fixture, not propagation, is wrong — the API
+                        // was already routable and returning 500 before this gate ran (the scenario's first leg
+                        // asserts exactly that), so a 404 or an auth rejection can never resolve by waiting.
+                        if (code == 500) {
+                            return new HealGate.NotReady("HTTP 500 (backend TLS still untrusted): " + r.getData());
+                        }
+                        return new HealGate.Fatal("gateway returned HTTP " + code
+                                + ", which is neither the trusted 200 nor the untrusted 500 this arc moves"
+                                + " between — the API or the credential is wrong, not the certificate"
+                                + " propagation: " + r.getData());
+                    },
+                    attempt -> reUploadCertificate(resolvedAlias),
+                    TRUST_GATE_ATTEMPTS);
+        } catch (AssertionError gateFailed) {
+            // The chain that causes this lives ONLY in the server log; without it the report is a bare
+            // "expected 200 but found 500" that names neither the trust store nor the dropped event.
+            throw new AssertionError(gateFailed.getMessage()
+                    + ContainerLogDiagnostics.explainTrustStoreRace(what), gateFailed);
+        }
+    }
+
+    /**
+     * Re-fires {@code ENDPOINT_CERTIFICATE_ADD} for an alias by deleting and re-uploading it.
+     *
+     * <p>Delete-then-upload rather than upload-only because re-posting an existing alias is rejected with 409 and
+     * would emit no event at all. The pair emits {@code REMOVE} then {@code ADD}; a JMS topic delivers to a given
+     * subscriber in order, so the {@code ADD} is always the last of the two applied and the heal can never leave
+     * the gateway less trusting than it found it.
+     *
+     * <p>Both calls use the raw client deliberately: a heal is not the step's response under test, and publishing
+     * {@code httpResponse} here would leave the following assertion reading the gate's own traffic (§7).
+     *
+     * <p><b>A failed re-trigger is NOT fatal, and that is load-bearing.</b> Deleting or uploading a certificate
+     * makes the control plane rewrite the very trust store whose racy read this gate exists to survive, so the
+     * heal's own management calls can be hit by the SAME race and answer 500. Measured: a mutation run aborted at
+     * attempt 3 of 10 because the DELETE returned 500, with {@code Unable to read the trust store file: null} in
+     * the server log at that instant. Treating that as fatal would make the gate give up exactly when the product
+     * is misbehaving in the way it is meant to absorb. A transient refusal therefore reports {@code NotReady} —
+     * HealGate counts the round and moves on, so the next window simply tries again. Only conditions that can
+     * never resolve ({@code 401}/{@code 403}, or an alias this class never uploaded) are {@code Fatal}.
+     */
+    private HealGate.Verdict reUploadCertificate(String alias) {
+        Object source = TestContext.get(CERT_SOURCE_PREFIX + alias);
+        Object endpoint = TestContext.get(CERT_ENDPOINT_PREFIX + alias);
+        if (source == null || endpoint == null) {
+            return new HealGate.Fatal("cannot re-upload certificate '" + alias + "': it was not uploaded through"
+                    + " the upload step, so its source file and endpoint are unknown");
+        }
+        try {
+            HttpResponse deleted = SimpleHTTPClient.getInstance().doDelete(
+                    Utils.getEndpointCertificateByAliasURL(Utils.getBaseUrl(), alias), publisherAuthHeaders());
+            int deleteCode = deleted == null ? -1 : deleted.getResponseCode();
+            // 404 is fine: the alias already being absent is a valid starting point for the re-upload.
+            if (deleteCode != 200 && deleteCode != 404) {
+                return classifyHealFailure("delete of certificate '" + alias + "'", deleteCode, deleted);
+            }
+            Map<String, File> files = new HashMap<>();
+            files.put("certificate", certFile(source.toString()));
+            Map<String, String> formFields = new HashMap<>();
+            formFields.put("alias", alias);
+            formFields.put("endpoint", endpoint.toString());
+            HttpResponse added = SimpleHTTPClient.getInstance().doPostMultipartWithFiles(
+                    Utils.getEndpointCertificatesURL(Utils.getBaseUrl()), publisherAuthHeaders(), files, formFields);
+            int addCode = added == null ? -1 : added.getResponseCode();
+            if (addCode != 201) {
+                return classifyHealFailure("re-upload of certificate '" + alias + "'", addCode, added);
+            }
+            // The alias is registered for teardown by the original upload and is re-created under the same name,
+            // so the registration still names a live resource and must not be touched here.
+            return new HealGate.Ready();
+        } catch (IOException transientDuringHeal) {
+            // Connectivity, not configuration — the next window retries.
+            return new HealGate.NotReady("re-trigger of '" + alias + "' could not reach the management API: "
+                    + transientDuringHeal);
+        } catch (Exception reUploadFailed) {
+            return new HealGate.Fatal("re-upload of certificate '" + alias + "' threw: " + reUploadFailed);
+        }
+    }
+
+    /**
+     * Decides whether a refused heal call can ever succeed. An auth rejection cannot, so it fails the gate
+     * immediately with a clear cause; anything else (notably a {@code 5xx} from the trust-store race) is reported
+     * as not-ready so the gate keeps its remaining attempts.
+     */
+    private static HealGate.Verdict classifyHealFailure(String what, int code, HttpResponse response) {
+        String body = response == null ? "null" : response.getData();
+        if (code == 401 || code == 403) {
+            return new HealGate.Fatal(what + " was refused with HTTP " + code
+                    + " — the acting actor cannot manage this certificate, which re-trying cannot fix: " + body);
+        }
+        return new HealGate.NotReady(what + " did not take effect this round: HTTP " + code + " / " + body);
     }
 
     /**

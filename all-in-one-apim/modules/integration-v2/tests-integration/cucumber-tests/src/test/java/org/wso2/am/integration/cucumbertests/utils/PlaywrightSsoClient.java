@@ -439,6 +439,32 @@ public final class PlaywrightSsoClient implements AutoCloseable {
                     + "issued no session token cookie of its own within 30s (the federated auth / JIT / token "
                     + "exchange did not complete). " + pageDiagnostic());
         }
+        // The token cookie can be issued by the callback before the browser finishes its final SPA navigation.
+        // Do not let the next step start a second navigation while that callback is still redirecting.
+        waitForAuthenticatedConsoleRoute(consoleContext, 30000);
+    }
+
+    /** Waits until the authenticated console has left its authentication callback and finished document loading. */
+    private void waitForAuthenticatedConsoleRoute(String consoleContext, int timeoutMs) {
+        try {
+            page.waitForURL(url -> isAuthenticatedConsoleRoute(consoleContext, url),
+                    new Page.WaitForURLOptions().setTimeout(timeoutMs));
+            page.waitForLoadState(com.microsoft.playwright.options.LoadState.LOAD,
+                    new Page.WaitForLoadStateOptions().setTimeout(timeoutMs));
+        } catch (RuntimeException e) {
+            throw new AssertionError("the '" + consoleContext + "' console issued its token but its browser route "
+                    + "did not settle within " + timeoutMs + "ms. " + pageDiagnostic(), e);
+        }
+    }
+
+    private static boolean isAuthenticatedConsoleRoute(String consoleContext, String url) {
+        try {
+            String path = URI.create(url).getPath();
+            String consolePrefix = "/" + consoleContext + "/";
+            return path.startsWith(consolePrefix) && !path.contains("/services/auth/");
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     /** Polls the cookie store until an {@code AM_ACC_TOKEN…} cookie appears or the timeout elapses. */
@@ -657,6 +683,12 @@ public final class PlaywrightSsoClient implements AutoCloseable {
         return exception.getMessage() != null && exception.getMessage().contains("net::ERR_ABORTED");
     }
 
+    private static boolean isNavigationInterrupted(PlaywrightException exception) {
+        String message = exception.getMessage();
+        return message != null && (message.contains("net::ERR_ABORTED")
+                || message.contains("interrupted by another navigation"));
+    }
+
     /** Requires the logout flow to return through the console's registered logout callback. */
     public void assertLogoutRedirect(String consoleContext) {
         String callback = "/" + consoleContext + "/services/auth/callback/logout";
@@ -793,8 +825,21 @@ public final class PlaywrightSsoClient implements AutoCloseable {
         // provided endpoint triggers a browser-side reachability test the proxy can't satisfy); it is set on the
         // Endpoints config page afterwards.
         for (int attempt = 1; attempt <= 6; attempt++) {
-        page.navigate(apimInternal + "/publisher/apis/create/rest",
-                    new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
+            try {
+                page.navigate(apimInternal + "/publisher/apis/create/rest",
+                        new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
+            } catch (PlaywrightException e) {
+                // The SSO callback may still be replacing /publisher/ when this step begins. The create form has
+                // not been submitted, so retrying this navigation is side-effect free; unrelated browser errors
+                // must remain visible to the test.
+                if (!isNavigationInterrupted(e)) {
+                    throw e;
+                }
+                log.info("[SSO-WORK] create navigation was interrupted by the SSO callback; waiting for the "
+                        + "Publisher route to settle before retrying");
+                waitForAuthenticatedConsoleRoute("publisher", 30000);
+                continue;
+            }
             try {
                 page.waitForSelector("[data-testid=default-api-form]",
                         new Page.WaitForSelectorOptions().setTimeout(30000));

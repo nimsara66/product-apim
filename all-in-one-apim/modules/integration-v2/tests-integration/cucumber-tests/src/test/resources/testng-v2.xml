@@ -911,6 +911,7 @@
     <!-- External-IdP console SSO: the publisher/admin/devportal consoles are federated through the external IS. -->
     <test name="IntegrationV2-ExternalIdpConsoleSso" parallel="classes" thread-count="1">
         <parameter name="blockLabel" value="external-idp-sso"/>
+        <parameter name="lifecycleLock" value="browser-sso"/>
         <parameter name="initTenantUsers" value="true"/>
         <parameter name="initBackend" value="true"/>
         <parameter name="bootExternalIdentityServer" value="true"/>
@@ -921,6 +922,7 @@
     <!-- Multi-tenant broker SSO uses an isolated tenant-sync overlay and notification receiver. -->
     <test name="IntegrationV2-MultiTenantSso" parallel="classes" thread-count="1">
         <parameter name="blockLabel" value="mt-sso"/>
+        <parameter name="lifecycleLock" value="browser-sso"/>
         <parameter name="bootExternalIdentityServer" value="true"/>
         <parameter name="initBackend" value="true"/>
         <parameter name="receiveExternalIsNotifications" value="true"/>

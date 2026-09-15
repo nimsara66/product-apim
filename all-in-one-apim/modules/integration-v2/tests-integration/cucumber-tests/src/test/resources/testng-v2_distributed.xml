@@ -540,6 +540,7 @@
          creation, deployment, subscription, Gateway invocation, cross-console SSO, provider change, and logout. -->
     <test name="IntegrationV2-Distributed-ExternalIdpConsoleSso" parallel="classes" thread-count="1">
         <parameter name="blockLabel" value="distributed-external-idp-sso"/>
+        <parameter name="lifecycleLock" value="browser-sso"/>
         <parameter name="initTenantUsers" value="true"/>
         <parameter name="initBackend" value="true"/>
         <parameter name="bootExternalIdentityServer" value="true"/>
@@ -551,6 +552,7 @@
          distributed CP/Gateway SSO overlay. Verified in the focused distributed suite. -->
     <test name="IntegrationV2-Distributed-MultiTenantSso" parallel="classes" thread-count="1">
         <parameter name="blockLabel" value="distributed-mt-sso"/>
+        <parameter name="lifecycleLock" value="browser-sso"/>
         <parameter name="initBackend" value="true"/>
         <parameter name="bootExternalIdentityServer" value="true"/>
         <parameter name="receiveExternalIsNotifications" value="true"/>
