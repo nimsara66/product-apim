@@ -66,14 +66,12 @@
         <parameter name="initTenantUsers" value="true"/>
         <parameter name="initBackend" value="true"/>
         <classes>
-        <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayDenyEnforcementRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayRestInvocationRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewaySoapInvocationRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayGraphQLInvocationRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewaySecurityEnforcementRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayCredentialTypeConfusionRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayBasicAuthSecurityRunner"/>
-        <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayThrottlingEnforcementRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayGraphQLScopeEnforcementRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayDefaultVersionRoutingRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayLifecycleStageInvocationRunner"/>
@@ -86,7 +84,6 @@
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewaySchemaValidationRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayWebSocketInvocationRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewaySseInvocationRunner"/>
-        <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayWebSubInvocationRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayCorsRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayMediationPoliciesRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.PublisherMcpServersRunner"/>
@@ -186,6 +183,11 @@
         <parameter name="initTenantUsers" value="true"/>
         <parameter name="initBackend" value="true"/>
         <classes>
+        <!-- These runners exercise shared gateway eventing/runtime state; keep them in this sequential,
+             gateway-isolated block so their setup cannot race other gateway classes. -->
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayDenyEnforcementRunner"/>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayThrottlingEnforcementRunner"/>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayWebSubInvocationRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayApplicationTierChangeRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewaySubscriptionValidationDisableRunner"/>
         </classes>
@@ -243,7 +245,7 @@
         <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalApplicationSharingRunner"/>
         </classes>
     </test>
-    <test name="IntegrationV2-Distributed-ApplicationAttributes" parallel="classes" thread-count="2">
+    <test name="IntegrationV2-Distributed-ApplicationAttributes" parallel="classes" thread-count="1">
         <parameter name="blockLabel" value="distributed-application-attributes"/>
         <parameter name="initTenantUsers" value="true"/>
         <parameter name="initBackend" value="true"/>
