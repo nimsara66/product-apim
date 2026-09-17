@@ -23,6 +23,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.testng.Assert;
 import org.wso2.am.integration.cucumbertests.utils.ContainerLogDiagnostics;
+import org.wso2.am.integration.cucumbertests.utils.GracefulServerRestart;
 import org.wso2.am.integration.cucumbertests.utils.HealGate;
 import org.wso2.am.integration.cucumbertests.utils.Identity;
 import org.wso2.am.integration.cucumbertests.utils.Requests;
@@ -31,6 +32,7 @@ import org.wso2.am.integration.cucumbertests.utils.TestContext;
 import org.wso2.am.integration.cucumbertests.utils.Utils;
 import org.wso2.am.integration.cucumbertests.utils.clients.SimpleHTTPClient;
 import org.wso2.am.integration.test.utils.Constants;
+import org.wso2.am.testcontainers.ApimRuntime;
 import org.wso2.carbon.automation.test.utils.http.client.HttpResponse;
 
 import java.io.File;
@@ -73,17 +75,11 @@ public class EndpointCertificateSteps {
     private static final String CERT_SOURCE_PREFIX = "endpointCertSource::";
     private static final String CERT_ENDPOINT_PREFIX = "endpointCertEndpoint::";
 
-    /**
-     * Attempts for the gateway-trust gate: one {@link Constants#RUNTIME_PROPAGATION_TIMEOUT} window (180s) then
-     * 60s per retry, so 10 attempts budget 180 + 9*60 = 720s.
-     *
-     * <p>Sized against the PRODUCT's own retry chain, not against how long propagation normally takes (normally
-     * this gate passes in the first window, in about a second). When the certificate-deploy event is dropped, the
-     * gateway's {@code EndpointCertificateDeployer} retries a permanently unusable HTTP client for
-     * 15+30+60+120+240 = ~465s before giving up, on the JMS listener's thread. A re-fired event can therefore
-     * queue behind that chain, so the gate's total budget has to outlast it or the heal would be swallowed.
-     */
-    private static final int TRUST_GATE_ATTEMPTS = 10;
+    /** One initial propagation window followed by one bounded recovery window. */
+    private static final int TRUST_GATE_ATTEMPTS = 2;
+    private static final String GATEWAY_CERTIFICATE_ADDED_LOG =
+            "The certificate with Alias '%s' is successfully added to the Gateway Trust Store.";
+    private static final String SSL_PROFILE_RELOAD_LOG = "PassThroughHttpSender reloading SSL Config";
 
     private Map<String, String> publisherAuthHeaders() {
         Map<String, String> headers = new HashMap<>();
@@ -165,9 +161,14 @@ public class EndpointCertificateSteps {
      *
      * @param alias    context-resolved alias of the certificate whose propagation is awaited
      * @param context  gateway context path to invoke, exactly as the following assertion step invokes it
+     * <p>If the initial window expires, the single recovery is deliberately ordered as a Gateway process restart,
+     * one delete/upload event re-trigger, and confirmation of the Gateway certificate-added and SSL-sender reload
+     * log markers. Repeating delete/upload without resetting the Gateway is unsafe: it builds an event backlog while
+     * the product's failed SSL client is still retrying the original event.
+     *
      * @param tokenKey context key holding the access token to present
      */
-    @Then("the endpoint certificate {string} should be trusted by the gateway at context {string} with access token {string}, re-uploading if propagation is lost")
+    @Then("the endpoint certificate {string} should be trusted by the gateway at context {string} with access token {string}, restarting the gateway once and re-uploading if propagation is lost")
     public void certificateShouldBeTrustedByTheGateway(String alias, String context, String tokenKey)
             throws Exception {
 
@@ -179,6 +180,7 @@ public class EndpointCertificateSteps {
         Map<String, String> auth = new HashMap<>();
         auth.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + token);
         String what = "gateway trust of endpoint certificate '" + resolvedAlias + "'";
+        boolean[] recoveryStarted = {false};
 
         try {
             HealGate.awaitOrHeal(what,
@@ -200,12 +202,18 @@ public class EndpointCertificateSteps {
                         if (code == 500) {
                             return new HealGate.NotReady("HTTP 500 (backend TLS still untrusted): " + r.getData());
                         }
+                        if (code == 404 && recoveryStarted[0]) {
+                            return new HealGate.NotReady("gateway route is still settling after the recovery restart");
+                        }
                         return new HealGate.Fatal("gateway returned HTTP " + code
                                 + ", which is neither the trusted 200 nor the untrusted 500 this arc moves"
                                 + " between — the API or the credential is wrong, not the certificate"
                                 + " propagation: " + r.getData());
                     },
-                    attempt -> reUploadCertificate(resolvedAlias),
+                    attempt -> {
+                        recoveryStarted[0] = true;
+                        return restartAndReUploadCertificate(resolvedAlias);
+                    },
                     TRUST_GATE_ATTEMPTS);
         } catch (AssertionError gateFailed) {
             // The chain that causes this lives ONLY in the server log; without it the report is a bare
@@ -235,6 +243,19 @@ public class EndpointCertificateSteps {
      * HealGate counts the round and moves on, so the next window simply tries again. Only conditions that can
      * never resolve ({@code 401}/{@code 403}, or an alias this class never uploaded) are {@code Fatal}.
      */
+    private HealGate.Verdict restartAndReUploadCertificate(String alias) throws Exception {
+        // Reset the Gateway's in-memory SSL client and its exhausted endpoint-certificate retry chain before
+        // emitting a fresh event. In distributed topology this targets only the Gateway; in all-in-one it is the
+        // unified APIM node, both through the topology-provided management URL.
+        GracefulServerRestart.gateway();
+        int reloadCountBeforeRetrigger = countOccurrences(readGatewayLog(), SSL_PROFILE_RELOAD_LOG);
+        HealGate.Verdict retrigger = reUploadCertificate(alias);
+        if (retrigger instanceof HealGate.Fatal || retrigger instanceof HealGate.NotReady) {
+            return retrigger;
+        }
+        return awaitGatewayCertificateReload(alias, reloadCountBeforeRetrigger);
+    }
+
     private HealGate.Verdict reUploadCertificate(String alias) {
         Object source = TestContext.get(CERT_SOURCE_PREFIX + alias);
         Object endpoint = TestContext.get(CERT_ENDPOINT_PREFIX + alias);
@@ -271,6 +292,58 @@ public class EndpointCertificateSteps {
         } catch (Exception reUploadFailed) {
             return new HealGate.Fatal("re-upload of certificate '" + alias + "' threw: " + reUploadFailed);
         }
+    }
+
+    /**
+     * Waits for product evidence that the fresh event reached the Gateway and that the outbound SSL sender rebuilt
+     * its profile. The functional gateway probe remains the gate's pass condition; these markers prevent the retry
+     * window from racing ahead of the product's own reload path and make a future failure actionable.
+     */
+    private HealGate.Verdict awaitGatewayCertificateReload(String alias, int reloadCountBeforeRetrigger)
+            throws InterruptedException {
+        String certificateAddedMarker = String.format(GATEWAY_CERTIFICATE_ADDED_LOG, alias);
+        long start = System.currentTimeMillis();
+        long deadline = start + Constants.RUNTIME_PROPAGATION_TIMEOUT;
+        String lastObserved = "no Gateway certificate/reload log markers observed";
+        while (System.currentTimeMillis() < deadline) {
+            String gatewayLog = readGatewayLog();
+            if (gatewayLog != null) {
+                boolean certificateAdded = gatewayLog.contains(certificateAddedMarker);
+                boolean senderReloaded = countOccurrences(gatewayLog, SSL_PROFILE_RELOAD_LOG)
+                        > reloadCountBeforeRetrigger;
+                if (certificateAdded && senderReloaded) {
+                    return new HealGate.Ready();
+                }
+                lastObserved = "certificate-added=" + certificateAdded + ", sender-reloaded=" + senderReloaded;
+            }
+            Utils.pollPause(start, Constants.RETRY_INTERVAL_TIME);
+        }
+        return new HealGate.NotReady("Gateway reload markers did not converge after recovery: " + lastObserved);
+    }
+
+    private String readGatewayLog() {
+        Object candidate = TestContext.get("blockApimContainer");
+        if (!(candidate instanceof ApimRuntime runtime)) {
+            return null;
+        }
+        try {
+            return runtime.readGatewayLogFile(ContainerLogDiagnostics.SERVER_LOG);
+        } catch (RuntimeException logUnavailable) {
+            return null;
+        }
+    }
+
+    private static int countOccurrences(String value, String marker) {
+        if (value == null || marker == null || marker.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        int from = 0;
+        while ((from = value.indexOf(marker, from)) >= 0) {
+            count++;
+            from += marker.length();
+        }
+        return count;
     }
 
     /**

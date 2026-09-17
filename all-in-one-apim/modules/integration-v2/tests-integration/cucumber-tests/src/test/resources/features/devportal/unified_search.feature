@@ -33,6 +33,9 @@ Feature: DevPortal Unified Search
     And I have created an api from "artifacts/payloads/create_apim_test_api.json" as "usApiId" and deployed it
     When I publish the "apis" resource with id "usApiId"
     Then The lifecycle status of API "usApiId" should be "Published"
+    When I retrieve the "apis" resource with id "usApiId"
+    And I extract response field "name" and store it as "usApiName"
+    And I wait until the DevPortal API index contains API "usApiId" named "{{usApiName}}" within 120 seconds
 
     # Legacy's fixture shape: HOWTO + INLINE, content written through the /content resource. The create payload's
     # inlineContent is METADATA ONLY on this build (an INLINE doc 404s on /content until this POST), so the content

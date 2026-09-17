@@ -31,6 +31,10 @@ Feature: Gateway Endpoint Certificate TLS Invocation
     Then The lifecycle status of API "tlsCertApiId" should be "Published"
     When I retrieve the "apis" resource with id "tlsCertApiId"
     And I extract response field "context" and store it as "tlsCertApiContext"
+    # Publishing records the deployment in the control plane, but the tenant-specific Gateway route is asynchronous.
+    # Gate the TLS transition on the actual Gateway artifact; the existing step can re-deploy a fresh revision if
+    # the deployment event was lost, while keeping the first 500 as the certificate-trust control.
+    And the "apis" resource "tlsCertApiId" should be live on the gateway, redeploying if propagation is lost
     When I have set up application with keys, subscribed to API "tlsCertApiId" with plan "Unlimited", and obtained access token for "tlsCertSubId"
     Then The response status code should be 200
 
@@ -46,9 +50,10 @@ Feature: Gateway Endpoint Certificate TLS Invocation
     Then The response status code should be 201
     # The gateway learns about the upload through a single at-most-once event, and the product drops it whenever
     # its trust-store read races the control plane's trust-store write. Waiting longer cannot recover that (the
-    # product stops retrying and never tries again) — only re-firing the upload can, so the prerequisite gets its
-    # own self-healing gate. The 200 below stays the assertion; this only makes sure the fixture exists first.
-    And the endpoint certificate "{{tlsCertAlias}}" should be trusted by the gateway at context "{{tlsCertApiContext}}/1.0.0/customers/123/" with access token "generatedAccessToken", re-uploading if propagation is lost
+    # product stops retrying and never tries again). The prerequisite therefore has one bounded recovery: restart
+    # the Gateway to clear its failed SSL client, re-fire the upload once, and wait for the Gateway reload markers.
+    # The 200 below stays the assertion; this only makes sure the fixture exists first.
+    And the endpoint certificate "{{tlsCertAlias}}" should be trusted by the gateway at context "{{tlsCertApiContext}}/1.0.0/customers/123/" with access token "generatedAccessToken", restarting the gateway once and re-uploading if propagation is lost
     When I invoke the API at gateway context "{{tlsCertApiContext}}/1.0.0/customers/123/" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 240 seconds
     Then The response status code should be 200
     # The BACKEND's body, so a gateway-generated 200 (a CORS/fault response, a cached error page) cannot pass.

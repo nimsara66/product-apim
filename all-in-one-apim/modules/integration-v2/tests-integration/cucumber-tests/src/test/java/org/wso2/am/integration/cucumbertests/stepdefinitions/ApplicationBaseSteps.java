@@ -5447,6 +5447,52 @@ public class ApplicationBaseSteps {
     }
 
     /**
+     * Waits until the DevPortal API index contains the exact scenario-owned API. This is a prerequisite for
+     * document-content indexing: lifecycle state and a successful document write do not prove that the API artifact
+     * is already visible to the asynchronous search index.
+     */
+    @When("I wait until the DevPortal API index contains API {string} named {string} within {int} seconds")
+    public void iWaitUntilDevportalApiIndexContains(String apiId, String apiName, int seconds)
+            throws IOException, InterruptedException {
+
+        String actualApiId = TestContext.resolve(apiId).toString();
+        String resolvedApiName = Utils.resolveContextPlaceholders(apiName);
+        String url = Utils.getApiSearchURL(Utils.getBaseUrl(), "name:" + resolvedApiName);
+        Map<String, String> headers = Identity.devportalHeaders();
+        HttpResponse response = Utils.retryUntil(seconds * 1000L,
+                () -> Requests.get(url, headers),
+                result -> devportalSearchContainsApi(result, actualApiId, resolvedApiName));
+        Requests.publishPollResult(response);
+        Assert.assertTrue(devportalSearchContainsApi(response, actualApiId, resolvedApiName),
+                "DevPortal API index did not contain API " + actualApiId + " named '" + resolvedApiName
+                        + "' within the deadline; last response: " + (response == null ? "null"
+                        : response.getResponseCode() + " / " + response.getData()));
+    }
+
+    private static boolean devportalSearchContainsApi(HttpResponse response, String apiId, String apiName) {
+        if (response == null || response.getResponseCode() != 200 || response.getData() == null
+                || response.getData().isBlank()) {
+            return false;
+        }
+        try {
+            JSONArray results = new JSONObject(response.getData()).optJSONArray("list");
+            if (results == null) {
+                return false;
+            }
+            for (int i = 0; i < results.length(); i++) {
+                JSONObject result = results.optJSONObject(i);
+                if (result != null && apiId.equals(result.optString("id", result.optString("apiId", "")))
+                        && apiName.equals(result.optString("name", ""))) {
+                    return true;
+                }
+            }
+        } catch (JSONException ignored) {
+            // A malformed or incomplete response is still pending during index warm-up.
+        }
+        return false;
+    }
+
+    /**
      * DevPortal API search that polls until the result set NO LONGER contains the given value — the removal
      * counterpart of the {@code until it contains} variant. Needed after mutating an API so a stale index entry
      * clears (e.g. ChangeAPITags: after removing a tag, the API must drop out of that tag's results). Polls on the
