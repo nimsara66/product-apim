@@ -110,6 +110,9 @@ public class WebSubInvocationSteps {
      */
     private static final long DELIVERY_SETTLE_QUIET_MILLIS = 10_000L;
 
+    /** Minimum interval between measured event submissions in the single-subscriber delivery-count arc. */
+    private static final long MEASURED_EVENT_INTERVAL_MILLIS = 1_000L;
+
     /**
      * Internal (data-plane) REST resource listing the PERSISTED webhook subscriptions of one tenant — the
      * {@code AM_WEBHOOKS_SUBSCRIPTION} read the legacy WebSubAPITestCase#testMultipleSubscriptions asserted
@@ -397,28 +400,63 @@ public class WebSubInvocationSteps {
         int secondInitialCount = readReceiver(secondReceiver).getInt("count");
 
         for (int i = 1; i <= times; i++) {
-            HttpResponse response = Utils.retryUntil(Constants.RUNTIME_PROPAGATION_TIMEOUT,
-                    () -> Requests.post(receiverUrl, signatureHeaders(signature), body,
-                            Constants.CONTENT_TYPES.APPLICATION_JSON),
-                    completed -> true);
-            Assert.assertNotNull(response, "WebSub event " + i + " of " + times + " never completed — the event "
-                    + "receiver at " + receiverUrl + " was unreachable within the warmup window.");
-            Assert.assertEquals(response.getResponseCode(), 200, "WebSub event " + i + " of " + times
-                    + " was not accepted by the event receiver; response: " + response.getData());
+            final int eventNumber = i;
+            publishAndAwaitDelivery(body, receiverUrl, signature, eventNumber, times,
+                    () -> bothReceiversReached(firstReceiver, firstInitialCount + eventNumber, secondReceiver,
+                            secondInitialCount + eventNumber),
+                    "receivers '" + firstReceiver + "' and '" + secondReceiver + "'");
+        }
+    }
 
-            int expectedFirstCount = firstInitialCount + i;
-            int expectedSecondCount = secondInitialCount + i;
-            Boolean delivered = Utils.retryUntil(Constants.RUNTIME_PROPAGATION_TIMEOUT,
-                    () -> bothReceiversReached(firstReceiver, expectedFirstCount, secondReceiver,
-                            expectedSecondCount), reached -> reached);
-            Assert.assertTrue(Boolean.TRUE.equals(delivered), "WebSub event " + i + " of " + times
-                    + " was accepted with 200 but was not observed by both receivers within the propagation window: "
-                    + firstReceiver + "=" + readReceiver(firstReceiver).getInt("count") + ", "
-                    + secondReceiver + "=" + readReceiver(secondReceiver).getInt("count"));
+    /**
+     * Publishes the measured five-event sequence for the single-subscriber delivery-count scenario. This is a
+     * separate step because that scenario has one receiver and must prove each event was delivered before sending
+     * the next one; the multi-subscriber step above retains its two-receiver contract.
+     */
+    @When("I publish the WebSub event {string} to the event receiver at gateway context {string} topic {string} "
+            + "signed with secret {string} {int} times expecting status 200 one second apart and wait for receiver "
+            + "{string}")
+    public void publishEventNTimesPacedSingleReceiver(String eventBody, String context, String topic, String secret,
+                                                       int times, String receiverKey) throws Exception {
 
-            if (i < times) {
-                Thread.sleep(1000L);
-            }
+        String body = TestContext.resolve(eventBody).toString();
+        String receiverUrl = eventReceiverUrl(context, Utils.resolveContextPlaceholders(topic));
+        String signature = HmacTestUtils.hubSignature("SHA1", body,
+                Utils.resolveContextPlaceholders(secret));
+        String receiver = TestContext.resolve(receiverKey).toString();
+        int initialCount = readReceiver(receiver).getInt("count");
+
+        for (int i = 1; i <= times; i++) {
+            int expectedCount = initialCount + i;
+            publishAndAwaitDelivery(body, receiverUrl, signature, i, times,
+                    () -> readReceiver(receiver).getInt("count") >= expectedCount,
+                    "receiver '" + receiver + "'");
+        }
+    }
+
+    /** Publishes one event, preserves the exact 200 contract, and waits for its delivery before the next event. */
+    private void publishAndAwaitDelivery(String body, String receiverUrl, String signature, int eventNumber, int total,
+                                         Utils.RetryAttempt<Boolean> deliveryAttempt, String receiverDescription)
+            throws Exception {
+
+        long eventStart = System.currentTimeMillis();
+        HttpResponse response = Utils.retryUntil(Constants.RUNTIME_PROPAGATION_TIMEOUT,
+                () -> Requests.post(receiverUrl, signatureHeaders(signature), body,
+                        Constants.CONTENT_TYPES.APPLICATION_JSON),
+                completed -> true);
+        Assert.assertNotNull(response, "WebSub event " + eventNumber + " of " + total + " never completed — the event "
+                + "receiver at " + receiverUrl + " was unreachable within the warmup window.");
+        Assert.assertEquals(response.getResponseCode(), 200, "WebSub event " + eventNumber + " of " + total
+                + " was not accepted by the event receiver; response: " + response.getData());
+
+        Boolean delivered = Utils.retryUntil(Constants.RUNTIME_PROPAGATION_TIMEOUT,
+                deliveryAttempt, reached -> reached);
+        Assert.assertTrue(Boolean.TRUE.equals(delivered), "WebSub event " + eventNumber + " of " + total
+                + " was accepted with 200 but was not observed by " + receiverDescription
+                + " within the propagation window.");
+
+        if (eventNumber < total) {
+            Utils.pollPause(eventStart, MEASURED_EVENT_INTERVAL_MILLIS);
         }
     }
 
@@ -965,13 +1003,16 @@ public class WebSubInvocationSteps {
         return new JSONObject(response.getData());
     }
 
-    /** Clears only the test receiver's recorded state; it does not unsubscribe the callback from the Gateway. */
-    private static void resetReceiver(String name) throws IOException {
+    /** Clears the test receiver's recorded state and restores its introspection registration. */
+    private void resetReceiver(String name) throws IOException, InterruptedException {
         String url = Utils.getNodeBackendUrl(WEBSUB_RECEIVER_PORT) + "/events/" + name + "/reset";
         HttpResponse response = SimpleHTTPClient.getInstance().doPost(url, new HashMap<>(), "",
                 Constants.CONTENT_TYPES.APPLICATION_JSON);
         Assert.assertTrue(response != null && response.getResponseCode() == 200,
                 "Failed to reset WebSub receiver '" + name + "' at " + url + "; got="
                         + (response == null ? "null" : response.getResponseCode() + "/" + response.getData()));
+        // The node fixture implements reset by deleting the in-memory receiver. Re-register it before the measured
+        // sequence so the first delivery barrier reads the same receiver that the callback URL addresses.
+        registerCallbackReceiver(name);
     }
 }

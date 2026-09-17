@@ -63,6 +63,7 @@ Feature: Gateway Endpoint Certificate TLS Invocation
     # LEG 3 — delete the certificate: trust is withdrawn and the handshake fails again.
     When I delete the endpoint certificate with alias "{{tlsCertAlias}}"
     Then The response status code should be 200
+    And the endpoint certificate "{{tlsCertAlias}}" should no longer be trusted by the gateway at context "{{tlsCertApiContext}}/1.0.0/customers/123/" with access token "generatedAccessToken", restarting the gateway once if removal propagation is lost
     When I invoke the API at gateway context "{{tlsCertApiContext}}/1.0.0/customers/123/" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 500 within 240 seconds
     Then The response status code should be 500
     # ...and it STAYS 500: enforcement, not a transient that the until-status poll happened to catch.

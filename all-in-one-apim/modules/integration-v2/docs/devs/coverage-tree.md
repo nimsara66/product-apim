@@ -477,7 +477,7 @@ integration-v2 product tests
 │   │   ├── [proxy-routing] specific profile beats catch-all — gateway routes through proxy rather than bypassing  (gateway/websocket_proxy_specific_over_catch_all.feature:16)
 │   │   ├── Register and deregister a WebSub subscription through the hub as <actor>  (gateway/websub_invocation.feature:40)
 │   │   ├── [subscription-configuration] A WebSub subscription configuration set after creation is persisted and describes the event receiver the source posts to as <actor>  (gateway/websub_invocation.feature:112)
-│   │   ├── [delivery-count] Publish events to a subscribed WebSub callback through the hub as <actor>  (gateway/websub_invocation.feature:206)
+│   │   ├── [delivery-count] Publish events to a subscribed WebSub callback through the hub as <actor>  (gateway/websub_invocation.feature:207)
 │   │   ├── [hmac-signature] The hub signs each WebSub delivery with the subscriber's own hub.secret as <actor>  (gateway/websub_invocation.feature:263)
 │   │   ├── [query-parameter-encoding] A WebSub subscription can be registered and removed with query parameters as <actor>  (gateway/websub_invocation.feature:318)
 │   │   ├── [unsubscribe] Every registered WebSub callback receives each event until it unsubscribes as <actor>  (gateway/websub_invocation.feature:354)

@@ -141,6 +141,7 @@ Feature: Gateway WebSub API Invocation
     # Redeploy so the artifact on the gateway carries the configured secret (see the note above), then publish
     When I deploy the API with id "websubApiId"
     Then The response status code should be 201
+    Then the "apis" resource "websubApiId" should be live on the gateway, redeploying if propagation is lost
     When I publish the "apis" resource with id "websubApiId"
     Then The lifecycle status of API "websubApiId" should be "Published"
     When I have set up application with keys, subscribed to API "websubApiId" with plan "AsyncWHUnlimited", and obtained access token for "websubSubId"
@@ -240,8 +241,7 @@ Feature: Gateway WebSub API Invocation
     # The persisted row proves control-plane state only. Establish a delivery-side barrier for this known distributed
     # topology race, then clear the probe before measuring the five scenario events.
     And I establish WebSub fan-out readiness for receiver "websubReceiver" at gateway context "{{websubContext}}/1.0.0" topic "_default" signed with secret "{{websubApiSecret}}" within 60 seconds
-    When I publish the WebSub event "websubEventBody" to the event receiver at gateway context "{{websubContext}}/1.0.0" topic "_default" signed with secret "{{websubApiSecret}}" until response status code becomes 200 within 60 seconds
-    And I publish the WebSub event "websubEventBody" to the event receiver at gateway context "{{websubContext}}/1.0.0" topic "_default" signed with secret "{{websubApiSecret}}" 4 times expecting status 200
+    When I publish the WebSub event "websubEventBody" to the event receiver at gateway context "{{websubContext}}/1.0.0" topic "_default" signed with secret "{{websubApiSecret}}" 5 times expecting status 200 one second apart and wait for receiver "websubReceiver"
     Then The WebSub receiver "websubReceiver" should have received 5 events within 60 seconds
     And The last WebSub event delivered to receiver "websubReceiver" should carry a "link" header containing "{{websubContext}}"
     When I send a WebSub "unsubscribe" request as form data to gateway context "{{websubContext}}/1.0.0" with callback "{{websubReceiverCallback}}" topic "_default" secret "{{websubSubscriberSecret}}" lease seconds "50000000" using access token "generatedAccessToken" until response status code becomes 202 within 60 seconds

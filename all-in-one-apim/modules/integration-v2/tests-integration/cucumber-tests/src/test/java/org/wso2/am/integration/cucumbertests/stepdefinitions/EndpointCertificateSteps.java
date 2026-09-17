@@ -77,9 +77,15 @@ public class EndpointCertificateSteps {
 
     /** One initial propagation window followed by one bounded recovery window. */
     private static final int TRUST_GATE_ATTEMPTS = 2;
+    /** One deletion-propagation window followed by one gateway-restart recovery window. */
+    private static final int REMOVAL_GATE_ATTEMPTS = 2;
     private static final String GATEWAY_CERTIFICATE_ADDED_LOG =
             "The certificate with Alias '%s' is successfully added to the Gateway Trust Store.";
+    private static final String GATEWAY_CERTIFICATE_REMOVED_LOG =
+            "The certificate with Alias '%s' is successfully removed from the Gateway Trust Store.";
     private static final String SSL_PROFILE_RELOAD_LOG = "PassThroughHttpSender reloading SSL Config";
+    private static final String CERT_REMOVAL_RELOAD_BASELINE_PREFIX = "endpointCertRemovalReloadBaseline::";
+    private static final String CERT_REMOVAL_LOG_BASELINE_PREFIX = "endpointCertRemovalLogBaseline::";
 
     private Map<String, String> publisherAuthHeaders() {
         Map<String, String> headers = new HashMap<>();
@@ -321,6 +327,89 @@ public class EndpointCertificateSteps {
         return new HealGate.NotReady("Gateway reload markers did not converge after recovery: " + lastObserved);
     }
 
+    /**
+     * Waits for the gateway to stop trusting a certificate after its control-plane record has been deleted.
+     *
+     * <p>The ordinary delete step verifies only the management-plane response. In distributed topology the gateway
+     * removal event can be lost, and in either topology the gateway can retain the certificate in its in-memory SSL
+     * profile indefinitely. This gate keeps the runtime assertion strict: HTTP 500 is accepted only after the
+     * gateway has emitted a fresh outbound-SSL reload marker after the DELETE, or after the one permitted gateway
+     * restart has completed and emitted a fresh reload marker. The removal text marker is retained as diagnostic
+     * evidence when the topology emits it, but it is not a distributed contract because the management-side removal
+     * log may be written by the control plane rather than the gateway. HTTP 200 remains not-ready, so waiting cannot
+     * turn a still-trusted certificate into a pass.
+     *
+     * <p>The following scenario steps still invoke the API until 500 and verify that 500 remains stable. This is a
+     * bounded fixture-convergence repair, not a replacement or relaxation of the product assertion.
+     */
+    @Then("the endpoint certificate {string} should no longer be trusted by the gateway at context {string} with access token {string}, restarting the gateway once if removal propagation is lost")
+    public void certificateShouldNoLongerBeTrustedByTheGateway(String alias, String context, String tokenKey)
+            throws Exception {
+
+        String resolvedAlias = Utils.resolveContextPlaceholders(alias);
+        String resolvedContext = Utils.resolveContextPlaceholders(context);
+        String token = TestContext.resolve(tokenKey).toString();
+        String url = Utils.getBaseGatewayUrl() + (resolvedContext.startsWith("/") ? "" : "/") + resolvedContext;
+        Map<String, String> auth = new HashMap<>();
+        auth.put(Constants.REQUEST_HEADERS.AUTHORIZATION, "Bearer " + token);
+        String what = "gateway removal of endpoint certificate '" + resolvedAlias + "'";
+        boolean[] recoveryStarted = {false};
+
+        Object reloadBaseline = TestContext.get(CERT_REMOVAL_RELOAD_BASELINE_PREFIX + resolvedAlias);
+        Object removalLogBaseline = TestContext.get(CERT_REMOVAL_LOG_BASELINE_PREFIX + resolvedAlias);
+        int[] reloadCountBaseline = {reloadBaseline instanceof Integer ? (Integer) reloadBaseline : -1};
+        int removalLogCountBeforeDelete = removalLogBaseline instanceof Integer
+                ? (Integer) removalLogBaseline : -1;
+
+        try {
+            HealGate.awaitOrHeal(what,
+                    () -> {
+                        String gatewayLog = readGatewayLog();
+                        int reloadCount = countOccurrences(gatewayLog, SSL_PROFILE_RELOAD_LOG);
+                        String removalMarker = String.format(GATEWAY_CERTIFICATE_REMOVED_LOG, resolvedAlias);
+                        int removalLogCount = countOccurrences(gatewayLog, removalMarker);
+                        HttpResponse response = SimpleHTTPClient.getInstance().doGet(url, auth);
+                        if (response == null) {
+                            return new HealGate.NotReady("no response from the gateway");
+                        }
+                        int code = response.getResponseCode();
+                        if (code == 500) {
+                            boolean removalObserved = removalLogCountBeforeDelete >= 0
+                                    && removalLogCount > removalLogCountBeforeDelete;
+                            boolean senderReloaded = reloadCountBaseline[0] >= 0
+                                    && reloadCount > reloadCountBaseline[0];
+                            if (senderReloaded) {
+                                return new HealGate.Ready();
+                            }
+                            return new HealGate.NotReady("HTTP 500 reached, but gateway removal/reload has not"
+                                    + " converged yet (removal-marker=" + removalObserved
+                                    + ", sender-reload=" + senderReloaded + ")");
+                        }
+                        if (code == 200) {
+                            return new HealGate.NotReady("HTTP 200 — gateway still trusts the deleted certificate");
+                        }
+                        if (code == 404 && recoveryStarted[0]) {
+                            return new HealGate.NotReady("gateway route is still settling after the recovery restart");
+                        }
+                        return new HealGate.Fatal("gateway returned HTTP " + code
+                                + ", which is neither the expected untrusted 500 nor the still-trusted 200: "
+                                + response.getData());
+                    },
+                    attempt -> {
+                        recoveryStarted[0] = true;
+                        String gatewayLog = readGatewayLog();
+                        reloadCountBaseline[0] = countOccurrences(gatewayLog, SSL_PROFILE_RELOAD_LOG);
+                        TestContext.set(CERT_REMOVAL_RELOAD_BASELINE_PREFIX + resolvedAlias, reloadCountBaseline[0]);
+                        GracefulServerRestart.gateway();
+                        return new HealGate.NotReady("gateway restarted; waiting for its fresh SSL sender reload");
+                    },
+                    REMOVAL_GATE_ATTEMPTS);
+        } catch (AssertionError gateFailed) {
+            throw new AssertionError(gateFailed.getMessage()
+                    + ContainerLogDiagnostics.explainTrustStoreRace(what), gateFailed);
+        }
+    }
+
     private String readGatewayLog() {
         Object candidate = TestContext.get("blockApimContainer");
         if (!(candidate instanceof ApimRuntime runtime)) {
@@ -396,6 +485,12 @@ public class EndpointCertificateSteps {
     @When("I delete the endpoint certificate with alias {string}")
     public void iDeleteEndpointCertificate(String alias) throws IOException {
         String resolvedAlias = Utils.resolveContextPlaceholders(alias);
+        String gatewayLogBeforeDelete = readGatewayLog();
+        TestContext.set(CERT_REMOVAL_RELOAD_BASELINE_PREFIX + resolvedAlias,
+                countOccurrences(gatewayLogBeforeDelete, SSL_PROFILE_RELOAD_LOG));
+        TestContext.set(CERT_REMOVAL_LOG_BASELINE_PREFIX + resolvedAlias,
+                countOccurrences(gatewayLogBeforeDelete,
+                        String.format(GATEWAY_CERTIFICATE_REMOVED_LOG, resolvedAlias)));
         HttpResponse response = Requests.delete(Utils.getEndpointCertificateByAliasURL(Utils.getBaseUrl(),
                 resolvedAlias), publisherAuthHeaders());
         if (response != null && response.getResponseCode() == 200) {

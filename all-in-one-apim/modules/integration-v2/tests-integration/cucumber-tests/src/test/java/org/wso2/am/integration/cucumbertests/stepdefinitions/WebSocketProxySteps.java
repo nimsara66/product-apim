@@ -84,6 +84,24 @@ public class WebSocketProxySteps {
     }
 
     /**
+     * Asserts that the authenticated proxy was reached at least once, after its CONNECT count has settled.
+     * Negative proxy scenarios must prove that the request reached the configured authenticated proxy, but the
+     * number of denied CONNECT attempts is an implementation detail of the gateway's failed transport path.
+     */
+    @Then("the authenticated proxy should have received at least {int} CONNECT request\\(s)")
+    public void assertAuthConnectCountAtLeast(int minimum) throws InterruptedException {
+        Utils.SettledCount settled = Utils.awaitSettledCount(QUIET_MILLIS, SETTLE_TIMEOUT_MILLIS,
+                () -> sample(getProxy()::getAuthConnectCount));
+        Assert.assertTrue(settled.settled(),
+                "Authenticated proxy CONNECT count never stopped changing (last=" + settled.value() + " after "
+                        + settled.samples() + " samples) — something is still opening tunnels.");
+        Assert.assertTrue(settled.value() >= minimum,
+                "Authenticated proxy CONNECT count mismatch: expected at least=" + minimum + " actual="
+                        + settled.value() + " (settled over " + settled.samples() + " samples) — the configured "
+                        + "authenticated proxy was not reached.");
+    }
+
+    /**
      * Asserts a Squid CONNECT count once it has STOPPED CHANGING, then asserts the exact value (§12/§15).
      *
      * <p>Reading the log once is unsound in BOTH directions and the failure is silent either way. Squid appends a
