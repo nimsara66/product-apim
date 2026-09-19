@@ -370,6 +370,17 @@ public class DistributedDynamicApimContainer implements ApimRuntime {
     }
 
     @Override
+    public String readTrafficManagerLogFile(String fileName) {
+        String path = SERVER_HOME + "/repository/logs/" + fileName;
+        try {
+            return tm.copyFileFromContainer(path,
+                    stream -> new String(stream.readAllBytes(), StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to read distributed Traffic Manager file: " + path, e);
+        }
+    }
+
+    @Override
     public String readContainerFile(String containerPath) {
         try {
             return cp.copyFileFromContainer(containerPath,

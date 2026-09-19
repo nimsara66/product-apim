@@ -434,6 +434,12 @@ public class DynamicApimContainer extends GenericContainer<DynamicApimContainer>
         return readContainerFile(getContainerLogFilePath(fileName));
     }
 
+    @Override
+    public String readTrafficManagerLogFile(String fileName) {
+        // The all-in-one distribution publishes and consumes throttle events in the same Carbon JVM.
+        return readContainerFile(getContainerLogFilePath(fileName));
+    }
+
     /**
      * Reads a file's content from inside the running container as UTF-8. Used by the remote-logging tests to
      * assert how the server rewrote {@code log4j2.properties} (e.g. an appender flipped to a SecuredHttp type).

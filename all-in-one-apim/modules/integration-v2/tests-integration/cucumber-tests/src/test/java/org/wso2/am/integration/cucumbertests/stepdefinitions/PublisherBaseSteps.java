@@ -1714,6 +1714,75 @@ public class PublisherBaseSteps {
     }
 
     /**
+     * Updates the WebSub subscription configuration and waits for the publisher read model to converge. The generic
+     * configuration step deliberately remains unchanged because its callers have different persistence contracts;
+     * this scenario-specific variant is for the WebSub API flow, where a successful PUT can briefly be followed by
+     * a GET of the old API representation.
+     *
+     * <p>The PUT status is asserted here, while the converged GET is published as {@code httpResponse} so the
+     * following feature assertions inspect persisted state rather than the PUT response echo. The lifecycle state is
+     * included in the predicate because the API representation and its lifecycle transition are persisted through
+     * the same asynchronous control-plane path.</p>
+     */
+    @When("I update the {string} resource {string} and {string} with WebSub configuration and wait until lifecycle {string} persists:")
+    public void iUpdateWebSubConfigurationAndWaitUntilPersisted(String resourceType, String resourceID,
+            String resourceUpdatePayload, String expectedLifecycle, String configValue)
+            throws IOException, InterruptedException {
+
+        Assert.assertEquals(resourceType, "apis", "WebSub configuration persistence is supported only for APIs");
+
+        String actualResourceId = TestContext.resolve(resourceID).toString();
+        Object contextPayload = TestContext.resolve(resourceUpdatePayload);
+        JSONObject jsonPayload = contextPayload instanceof JSONObject
+                ? (JSONObject) contextPayload : new JSONObject(contextPayload.toString());
+        String resolvedConfig = Utils.resolveContextPlaceholders(configValue);
+        JSONObject webSubConfiguration = new JSONObject(resolvedConfig);
+        jsonPayload.put("websubSubscriptionConfiguration", webSubConfiguration);
+        String updatedJsonPayload = jsonPayload.toString();
+
+        Map<String, String> headers = Identity.publisherHeaders();
+        HttpResponse updateResponse = Requests.put(
+                Utils.getResourceEndpointURL(Utils.getBaseUrl(), resourceType, actualResourceId), headers,
+                updatedJsonPayload, Constants.CONTENT_TYPES.APPLICATION_JSON);
+        Assert.assertNotNull(updateResponse, "WebSub configuration update returned no response");
+        Assert.assertEquals(updateResponse.getResponseCode(), 200,
+                "WebSub configuration update failed: " + updateResponse.getData());
+
+        String expectedSecret = webSubConfiguration.optString("secret", "");
+        String expectedState = Utils.resolveContextPlaceholders(expectedLifecycle);
+        String getUrl = Utils.getResourceEndpointURL(Utils.getBaseUrl(), resourceType, actualResourceId);
+        HttpResponse persistedResponse = Utils.retryUntil(Constants.RUNTIME_PROPAGATION_TIMEOUT,
+                () -> SimpleHTTPClient.getInstance().doGet(getUrl, headers),
+                response -> webSubConfigurationPersisted(response, expectedSecret, expectedState));
+        Requests.publishPollResult(persistedResponse);
+
+        Assert.assertTrue(webSubConfigurationPersisted(persistedResponse, expectedSecret, expectedState),
+                "WebSub configuration did not converge after the successful PUT. Expected enable=true, secret='"
+                        + expectedSecret + "', lifecycle='" + expectedState + "'; last response: "
+                        + (persistedResponse == null ? "none (all reads failed)"
+                        : persistedResponse.getResponseCode() + " / " + persistedResponse.getData()));
+    }
+
+    private static boolean webSubConfigurationPersisted(HttpResponse response, String expectedSecret,
+            String expectedLifecycle) {
+
+        if (response == null || response.getResponseCode() != 200 || response.getData() == null
+                || response.getData().isBlank()) {
+            return false;
+        }
+        try {
+            JSONObject api = new JSONObject(response.getData());
+            JSONObject configuration = api.optJSONObject("websubSubscriptionConfiguration");
+            String lifecycle = api.optString("lifeCycleStatus", api.optString("lifecycleStatus", ""));
+            return configuration != null && configuration.optBoolean("enable", false)
+                    && expectedSecret.equals(configuration.optString("secret", ""))
+                    && expectedLifecycle.equalsIgnoreCase(lifecycle);
+        } catch (JSONException ignored) {
+            return false;
+        }
+    }
+
+    /**
      * Blocks a subscription, preventing it from being used for API invocation.
      *
      * @param subscriptionID Context key containing the subscription ID to block

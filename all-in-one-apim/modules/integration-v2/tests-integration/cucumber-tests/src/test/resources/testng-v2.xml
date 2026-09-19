@@ -69,7 +69,6 @@
         <classes>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalApplicationsRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalSearchRunner"/>
-            <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalUnifiedSearchRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalEnvironmentUrlsRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalSubscriptionManagementRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalSubscribeRunner"/>
@@ -82,6 +81,17 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalCommentThreadsRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalRatingsRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalGraphqlComplexityRunner"/>
+        </classes>
+    </test>
+    <!-- Unified document search depends on asynchronous registry/Solr document-content indexing. Keep it in a
+         dedicated sequential default-config container so concurrent DevPortal API/document mutations cannot
+         reorder or starve the document indexing work. The runner and its exact-count assertions are unchanged. -->
+    <test name="IntegrationV2-DevPortal-UnifiedSearch" parallel="classes" thread-count="1">
+        <parameter name="blockLabel" value="devportal-unified-search"/>
+        <parameter name="initTenantUsers" value="true"/>
+        <parameter name="initSecondaryUserStore" value="true"/>
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalUnifiedSearchRunner"/>
         </classes>
     </test>
     <!-- Gateway features (runtime invocation) share their own container. -->
@@ -163,7 +173,6 @@
         <parameter name="initSecondaryUserStore" value="true"/>
         <classes>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminApplicationSearchRunner"/>
-            <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminThrottlingPolicyRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminGatewayEnvironmentsRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminKeyManagerConfigRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminDenyPolicyRunner"/>
@@ -176,6 +185,18 @@
             <!-- Secondary user store (@cap:admin): initSecondaryUserStore (above) seeds the SECONDARY.COM store +
                  actors at boot; this runner exercises case-insensitive resolution, store-user provisioning, etc. -->
             <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminSecondaryUserStoreRunner"/>
+        </classes>
+    </test>
+
+    <!-- Throttling policy scenarios update API and subscription state while asynchronous key-manager/configuration
+         events may still be settling. Keep this runner in its own default-config container and execute it
+         sequentially; this preserves the policy assertions while preventing cross-runner control-plane races. -->
+    <test name="IntegrationV2-Admin-ThrottlingPolicy" parallel="classes" thread-count="1">
+        <parameter name="blockLabel" value="admin-throttling-policy"/>
+        <parameter name="initTenantUsers" value="true"/>
+        <parameter name="initSecondaryUserStore" value="true"/>
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminThrottlingPolicyRunner"/>
         </classes>
     </test>
 
@@ -443,17 +464,12 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.block.TokenExchangeDisabledRunner"/>
         </classes>
     </test>
-    <!-- Two orthogonal gateway-enforcement features co-hosted in one container; the combined overlay
-         (throttlingAndAllowedScopes) merges their non-overlapping tables. Both @cap:gateway, need the backend.
-           - ConditionalThrottling (@feat:throttling-enforcement): header/query/JWT-claim conditional groups
-             ([apim.throttling] flags + [apim.jwt] backend JWT).
-           - AllowedScopes (@feat:security-enforcement): OAuth allowed-scopes whitelist ([oauth] allowed_scopes).
-         Verified mutually inert: the whitelist doesn't reject token issuance (only the gateway operation-scope
-         check on AllowedScopes' own API), and the throttle flags don't trip without a matching policy on
-         AllowedScopes' APIs. thread-count=2 (concurrent classes): despite ConditionalThrottling's timing-sensitive
-         429 windows, TP=2 was validated stable across 4 back-to-back runs — the throttle counters are per-API +
-         condition-scoped, so AllowedScopes' traffic (different APIs) can't perturb them. -->
-    <test name="IntegrationV2-ThrottlingAndAllowedScopes" parallel="classes" thread-count="2">
+    <!-- These features use different APIs, but they share the server-global throttleData event publisher,
+         registry and JMS consumer. Starting/tearing down the two classes concurrently can race the singleton
+         throttle event pipeline; the legacy throttling class was sequential. Keep the block sequential and let
+         conditional_throttling.feature verify the TM publisher and Gateway throttleData consumer before any
+         enforcement request. The exact 429 assertions remain unchanged. -->
+    <test name="IntegrationV2-ThrottlingAndAllowedScopes" parallel="classes" thread-count="1">
         <parameter name="blockLabel" value="throttling-allowed-scopes"/>
         <parameter name="initTenantUsers" value="true"/>
         <parameter name="initBackend" value="true"/>

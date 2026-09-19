@@ -126,7 +126,7 @@ Feature: Gateway WebSub API Invocation
     And The value of response field "websubSubscriptionConfiguration.signatureHeader" should be "x-hub-signature"
     And I put the response payload in context as "websubCfgPayload"
     # ...then enable it as a post-creation update, the documented order
-    When I update the "apis" resource "websubApiId" and "websubCfgPayload" with configuration type "websubSubscriptionConfiguration" and value:
+    When I update the "apis" resource "websubApiId" and "websubCfgPayload" with WebSub configuration and wait until lifecycle "CREATED" persists:
       """
       {"enable":true,"secret":"{{websubApiSecret}}","signingAlgorithm":"SHA1","signatureHeader":"x-hub-signature"}
       """
@@ -215,7 +215,7 @@ Feature: Gateway WebSub API Invocation
     Then The response status code should be 201
     When I retrieve the "apis" resource with id "websubApiId"
     And I put the response payload in context as "websubCfgPayload"
-    When I update the "apis" resource "websubApiId" and "websubCfgPayload" with configuration type "websubSubscriptionConfiguration" and value:
+    When I update the "apis" resource "websubApiId" and "websubCfgPayload" with WebSub configuration and wait until lifecycle "CREATED" persists:
       """
       {"enable":true,"secret":"{{websubApiSecret}}","signingAlgorithm":"SHA1","signatureHeader":"x-hub-signature"}
       """

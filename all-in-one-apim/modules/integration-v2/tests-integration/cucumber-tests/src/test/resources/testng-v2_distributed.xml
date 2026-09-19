@@ -48,7 +48,6 @@
         <classes>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalApplicationsRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalSearchRunner"/>
-        <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalUnifiedSearchRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalEnvironmentUrlsRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalSubscriptionManagementRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalSubscribeRunner"/>
@@ -59,6 +58,17 @@
         <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalCommentThreadsRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalRatingsRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalGraphqlComplexityRunner"/>
+        </classes>
+    </test>
+    <!-- Unified document search depends on asynchronous registry/Solr document-content indexing. Keep it in a
+         dedicated sequential distributed container so concurrent DevPortal API/document mutations cannot
+         reorder or starve the document indexing work. The runner and its exact-count assertions are unchanged. -->
+    <test name="IntegrationV2-Distributed-DevPortal-UnifiedSearch" parallel="classes" thread-count="1">
+        <parameter name="blockLabel" value="distributed-devportal-unified-search"/>
+        <parameter name="initTenantUsers" value="true"/>
+        <parameter name="initSecondaryUserStore" value="true"/>
+        <classes>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalUnifiedSearchRunner"/>
         </classes>
     </test>
     <test name="IntegrationV2-Distributed-Gateway" parallel="classes" thread-count="2">
@@ -126,7 +136,6 @@
         <parameter name="initSecondaryUserStore" value="true"/>
         <classes>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminApplicationSearchRunner"/>
-        <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminThrottlingPolicyRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminGatewayEnvironmentsRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminKeyManagerConfigRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminDenyPolicyRunner"/>
@@ -137,6 +146,17 @@
         <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminApiCategoriesRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminApplicationOwnerChangeRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminSecondaryUserStoreRunner"/>
+        </classes>
+    </test>
+    <!-- Throttling policy scenarios update API and subscription state while asynchronous key-manager/configuration
+         events may still be settling. Keep this runner in its own default distributed container and execute it
+         sequentially; this preserves the policy assertions while preventing cross-runner control-plane races. -->
+    <test name="IntegrationV2-Distributed-Admin-ThrottlingPolicy" parallel="classes" thread-count="1">
+        <parameter name="blockLabel" value="distributed-admin-throttling-policy"/>
+        <parameter name="initTenantUsers" value="true"/>
+        <parameter name="initSecondaryUserStore" value="true"/>
+        <classes>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.AdminThrottlingPolicyRunner"/>
         </classes>
     </test>
     <!-- Governance features use the distributed control-plane services and the shared backend. -->
@@ -280,7 +300,10 @@
         <class name="org.wso2.am.integration.cucumbertests.runners.block.TokenExchangeDisabledRunner"/>
         </classes>
     </test>
-    <test name="IntegrationV2-Distributed-ThrottlingAndAllowedScopes" parallel="classes" thread-count="2">
+    <!-- TM and Gateway share the throttleData publisher/consumer pipeline and registry state. A class-parallel
+         block can race that singleton initialization even when the API traffic is otherwise independent. Keep
+         this distributed block sequential; the feature gates both component log markers before enforcement. -->
+    <test name="IntegrationV2-Distributed-ThrottlingAndAllowedScopes" parallel="classes" thread-count="1">
         <parameter name="blockLabel" value="distributed-throttling-allowed-scopes"/>
         <parameter name="initTenantUsers" value="true"/>
         <parameter name="initBackend" value="true"/>
