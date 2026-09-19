@@ -22,9 +22,7 @@ Feature: Admin System Scope Role-Alias Mapping
     When I retrieve the role aliases
     Then The response status code should be 200
     And The response should contain "testRole"
-    When I clear all role aliases
-    Then The response status code should be 200
-    When I retrieve the role aliases
+    When I clear all role aliases and wait until alias "testRole" is absent
     Then The response status code should be 200
     And The response should not contain "testRole"
 

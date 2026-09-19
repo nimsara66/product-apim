@@ -4431,6 +4431,36 @@ public class ApplicationBaseSteps {
                 Identity.adminHeaders(), payload.toString(), Constants.CONTENT_TYPES.APPLICATION_JSON);
     }
 
+    /**
+     * Clears all system-scope role-alias mappings and waits for a subsequent read to observe the requested alias as
+     * absent. The write endpoint can acknowledge the update before the role-alias read path has converged under
+     * full-suite load, so this is deliberately a scenario-specific semantic barrier rather than a fixed sleep or a
+     * repeated PUT. The final response remains the assertion target for the existing status and absence assertions.
+     */
+    @When("I clear all role aliases and wait until alias {string} is absent")
+    public void iClearAllRoleAliasesAndWaitUntilAliasIsAbsent(String alias) throws IOException, InterruptedException {
+
+        String resolvedAlias = Utils.resolveContextPlaceholders(alias);
+        JSONObject payload = new JSONObject().put("count", 0).put("list", new JSONArray());
+        Requests.put(Utils.getRoleAliasesURL(Utils.getBaseUrl()), Identity.adminHeaders(), payload.toString(),
+                Constants.CONTENT_TYPES.APPLICATION_JSON);
+
+        String roleAliasesUrl = Utils.getRoleAliasesURL(Utils.getBaseUrl());
+        HttpResponse last = Utils.retryUntil(Constants.RUNTIME_PROPAGATION_TIMEOUT,
+                () -> Requests.get(roleAliasesUrl, Identity.adminHeaders()),
+                response -> response != null && response.getResponseCode() == 200
+                        && response.getData() != null && !response.getData().isBlank()
+                        && !response.getData().contains(resolvedAlias));
+        Requests.publishPollResult(last);
+
+        if (last == null || last.getResponseCode() != 200 || last.getData() == null
+                || last.getData().contains(resolvedAlias)) {
+            log.warn("Role-alias clear did not converge for alias '" + resolvedAlias + "' within "
+                    + Constants.RUNTIME_PROPAGATION_TIMEOUT + " ms; last response: "
+                    + (last == null ? "none" : last.getResponseCode() + " / " + last.getData()));
+        }
+    }
+
     /** Maps a friendly throttling-policy kind to the export/import {@code type} token. */
     private static String throttleExportType(String friendlyType) {
         switch (friendlyType) {

@@ -893,6 +893,16 @@ public class PublisherBaseSteps {
      * flake into a hard failure. The new id replaces {@code revisionId} in context so a later heal reaps it.
      */
     HealGate.Verdict reconcileAndRedeployRevision(String resourceType, String resourceId) {
+        return reconcileAndRedeployRevision(resourceType, resourceId, null);
+    }
+
+    /**
+     * Reconciles a revision and, when requested by a scenario, updates the scenario-owned reference to the
+     * replacement revision. The explicit reference is deliberately opt-in: some scenarios retain an immutable
+     * historical revision for later assertions and must not have arbitrary context values rewritten.
+     */
+    private HealGate.Verdict reconcileAndRedeployRevision(String resourceType, String resourceId,
+                                                           String revisionReferenceKey) {
         try {
             String staleRevision = TestContext.contains("revisionId")
                     ? TestContext.resolve("revisionId").toString() : null;
@@ -932,6 +942,9 @@ public class PublisherBaseSteps {
                 return new HealGate.Fatal("could not deploy the fresh revision " + freshRevision + ": got="
                         + (deployed == null ? "null" : deployed.getResponseCode() + "/" + deployed.getData()));
             }
+            if (revisionReferenceKey != null) {
+                TestContext.set(Utils.normalizeContextKey(revisionReferenceKey), freshRevision);
+            }
             logger.warn("self-heal: re-deployed {} {} as fresh revision {}", resourceType, resourceId,
                     freshRevision);
             return new HealGate.Ready();
@@ -951,6 +964,28 @@ public class PublisherBaseSteps {
      */
     @Then("the {string} resource {string} should be live on the gateway, redeploying if propagation is lost")
     public void resourceShouldBeLiveOnGateway(String resourceType, String resourceId) throws Exception {
+        resourceShouldBeLiveOnGateway(resourceType, resourceId, null);
+    }
+
+    /**
+     * Explicit provider-change variant of the gateway readiness gate. A revision healing operation can replace
+     * the revision row; this variant updates the named scenario reference so a later explicit undeploy targets the
+     * live replacement rather than the row the gate intentionally deleted.
+     */
+    @Then("the {string} resource {string} should be live on the gateway, redeploying if propagation is lost and updating revision key {string}")
+    public void resourceShouldBeLiveOnGatewayAndUpdateRevisionKey(String resourceType, String resourceId,
+                                                                    String revisionReferenceKey) throws Exception {
+        String normalizedReferenceKey = Utils.normalizeContextKey(revisionReferenceKey);
+        Assert.assertTrue(TestContext.contains(normalizedReferenceKey),
+                "Revision reference key '" + revisionReferenceKey + "' is not present in the scenario context");
+        Assert.assertEquals(TestContext.resolve(normalizedReferenceKey).toString(),
+                TestContext.resolve("revisionId").toString(),
+                "Revision reference '" + revisionReferenceKey + "' does not point to the current revisionId");
+        resourceShouldBeLiveOnGateway(resourceType, resourceId, normalizedReferenceKey);
+    }
+
+    private void resourceShouldBeLiveOnGateway(String resourceType, String resourceId,
+                                               String revisionReferenceKey) throws Exception {
 
         String actualResourceId = TestContext.resolve(resourceId).toString();
         // Intermediate read: resolve the resource's name/version for the gateway artifact query.
@@ -1002,7 +1037,7 @@ public class PublisherBaseSteps {
                     }
                     return new HealGate.NotReady("HTTP " + code);
                 },
-                attempt -> reconcileAndRedeployRevision(resourceType, actualResourceId),
+                attempt -> reconcileAndRedeployRevision(resourceType, actualResourceId, revisionReferenceKey),
                 3);
     }
 

@@ -94,7 +94,7 @@ Feature: Gateway Invocation After An API Provider Change
     When I deploy revision "gciRevision1" of "apis" resource "gciApiId"
     Then The response status code should be 201
     And I wait for deployment of the resource in "gciRetrievedPayload"
-    And the "apis" resource "gciApiId" should be live on the gateway, redeploying if propagation is lost
+    And the "apis" resource "gciApiId" should be live on the gateway, redeploying if propagation is lost and updating revision key "gciRevision1"
     And I publish the "apis" resource with id "gciApiId"
     Then The lifecycle status of API "gciApiId" should be "Published"
 
