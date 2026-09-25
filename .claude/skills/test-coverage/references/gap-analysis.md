@@ -26,6 +26,15 @@ flow belongs*; use the actual feature files to decide *what's already covered*.
    - **absent** — no scenario exercises it. New scenario; extend an existing feature file if one fits its `@cap`,
      else a new file (justify).
 3. Record the exact file + scenario pointers for each verdict (the plan needs them).
+4. **Check topology parity for product integration flows.** Inspect both
+   `tests-integration/cucumber-tests/src/test/resources/testng-v2.xml` and
+   `testng-v2_distributed.xml`. Confirm the same product runner/scenario is registered in both, and compare its
+   block-level setup (listener, `blockLabel`, actor/backend initialization, overlays, lifecycle locks, and
+   concurrency) using the [distributed infrastructure design](../../../../all-in-one-apim/modules/integration-v2/docs/devs/distributed-apim-v2-infrastructure-design.md)
+   as the topology contract. Record mismatches as parity gaps even when the feature itself is already covered in
+   one topology. Unit tests are topology-neutral; do not duplicate unit tests merely to satisfy integration-suite
+   parity. For framework-verification tests whose subject is specifically one topology, state that scope
+   explicitly.
 
 ## Coverage as post-hoc measurement (NOT the gap oracle)
 `-Dapim.coverage=true` quantifies what the tests you IMPLEMENT actually exercise. Use it in Phase 6/7 to report
@@ -34,3 +43,5 @@ the delta and re-evaluate — not to decide what to write in Phase 2.
 ## Output — the gap report
 - Unit gaps: class → methods/branches missing assertions.
 - Integration gaps: flow → {covered | partial | absent} + owning feature file/scenario + suggested placement.
+- Topology parity: product runner/scenario → all-in-one registration/config + distributed registration/config +
+  {parity | missing | configuration drift | justified topology-specific exception}.

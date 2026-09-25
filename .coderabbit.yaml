@@ -14,3 +14,10 @@ reviews:
     drafts: false
 chat:
   auto_reply: true
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      - files: ".claude/rules/integration-tests.md"
+        applyTo: "all-in-one-apim/modules/integration/tests-integration/**/*"
+      - files: ".claude/rules/integration-tests.md"
+        applyTo: "all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/**/*"

@@ -5,7 +5,9 @@ description: >-
   unit + integration — that improve coverage and harden product flows against regressions. Use when a feature or
   patch developer wants tests written for their changes, or asks "what tests should I add / is this covered".
   Decides unit vs integration per a rubric, reuses existing steps/features (no duplication), and gates new
-  capabilities/blocks on lead approval.
+  capabilities/blocks on lead approval. Product integration scenarios must stay in parity across all-in-one and
+  distributed suites and pass focused runtime verification in both before PR submission. For diagnosing or
+  repairing an existing CI test failure, use `ci-failure-rca`.
 ---
 
 # Test-Coverage Authoring Skill
@@ -61,8 +63,10 @@ Follow `references/gap-analysis.md`.
   assertions.
 - **Integration track:** place each candidate flow in the **capability tree** (`docs/devs/capability-map.yml` +
   `docs/devs/coverage-tree.md`, the generated tree) for ORGANIZATION/placement, then read the owning feature
-  file(s)/scenarios to judge covered / partial / absent. The tree tells you *where a test belongs*; the actual
-  feature files tell you *what's already covered* — do not trust tag names alone.
+  file(s)/scenarios to judge covered / partial / absent. Also verify runner registration and block setup in both
+  `testng-v2.xml` (all-in-one) and `testng-v2_distributed.xml` (distributed). The tree tells you *where a test
+  belongs*; the feature files tell you *what's covered*; the two suite files tell you *where it executes* — do
+  not trust tags or the tree alone.
 Output: a gap report (unit gaps + integration gaps, each with a covered/partial/absent verdict + file pointers).
 
 ## Phase 3 — Test-plan synthesis
@@ -72,7 +76,8 @@ Prioritize by `coverage-gain × regression-value ÷ cost` (cost is block-level �
   approved as a batch.
 - **Integration tests** → a **flow-by-flow** breakdown, each item individually selectable, with: `@cap`/`@feat`
   placement · the feature file it *extends* (or a new file/block + justification) · the step definitions it
-  reuses · the exact-value assertion · ×2-tenant note · new-infra flag.
+  reuses · the exact-value assertion · ×2-tenant note · all-in-one and distributed runner/block mapping ·
+  new-infra flag.
 - **Opportunistic** (not-from-diff) gaps are allowed but **quarantined**: clearly labeled, default-off, capped
   (≤3), adjacency-limited. Never turn a one-bug patch into a 20-item plan.
 Output: a `TEST-PLAN.md` the dev can edit/select from.
@@ -93,22 +98,38 @@ artifact (grep the glue for a reusable step; confirm no existing feature fits).
   fix, confirm it PASSES. A test that can't fail on the old code doesn't guard anything.
 - **Integration:** reuse/extend steps (never near-duplicate), extend existing feature files where one fits,
   correct folder + `@cap`, isolation/cleanup/actor rules, `Copyright (c) 2026` on new `.java`, ×2 tenant, strict
-  **exact-value** assertions (never `401 || 403`).
+  **exact-value** assertions (never `401 || 403`). Keep product scenario coverage in parity: update/register the
+  runner and scenario in both `testng-v2.xml` and `testng-v2_distributed.xml`, preserving each topology's real
+  listener and block parameters. New product runners must be registered in both suites. Do not silently omit a
+  scenario from one topology; if a test is inherently topology-specific or cannot run in one topology, document
+  the reason and the scoped exception in the plan.
 - **Docs divergence (feature):** where a docs-derived assertion disagrees with actual behavior, SURFACE it
   (doc bug vs impl bug) — never silently encode one.
 
 ## Phase 6 — Verify
-- **Minimal first:** unit → run the affected class(es); integration → a scratch/minimal testng suite with just
-  the new block(s). Confirm green.
-- **Then ASK** before the full local suite. Run it with `-Dapim.coverage=true` to capture the coverage delta
-  (the quantitative re-eval). The exec dir is auto-purged at suite start, so no manual cleanup is needed.
+- **Minimal first:** unit → run the affected class(es); integration → run focused suites on BOTH all-in-one and
+  distributed topologies before marking the change ready for a pull request. Each focused suite selects the
+  affected runner(s) while preserving the corresponding suite's real block configuration, listener, overlay,
+  and topology. Confirm the expected runner/scenarios executed and inspect test counts/reports; a successful
+  Maven exit with zero or unintended tests is not verification. Use the repository's documented Docker/image
+  setup and rebuild any changed fixture image that the test consumes.
+- This two-topology focused verification is required even if the distributed full-suite CI lane is disabled or
+  skipped. The product suite contract is runner/scenario parity; distributed JaCoCo collection remains
+  intentionally unsupported, so do not require `-Dapim.coverage=true` for the distributed run.
+- If either topology fails, diagnose and fix it or report the change as not ready for PR; do not claim parity
+  from the other topology's pass. If a topology is genuinely inapplicable, use the documented scoped exception
+  from Phase 5 and explain its runtime evidence.
+- **Then ASK** before the full local suite. Run it with `-Dapim.coverage=true` on all-in-one to capture the
+  coverage delta (the quantitative re-eval). The exec dir is auto-purged at suite start, so no manual cleanup is
+  needed.
 - **Blockers** (infra gaps, product quirks) → surface and discuss; park with a documented reason if unresolved
   (never massage a suspicious failure to green).
 
 ## Phase 7 — Wrap
 - If a new `@cap`/`@feat` was approved: update `capability-map.yml`, regenerate the tree
   (`python3 docs/devs/render_coverage_tree.py`, require `invalid: 0`), and mark the new flows covered.
-- Report the coverage delta (unit + integration, before/after) as the closing artifact.
+- Report the coverage delta (unit + integration, before/after) and focused runtime results separately for
+  all-in-one and distributed as the closing artifact.
 
 ---
 

@@ -75,7 +75,9 @@ to pin. → test-worthiness ledger.
   assertions.
 - *Integration track:* place each candidate flow in the **capability tree** (organization) and read the owning
   feature file(s)/scenarios to judge covered / partial / absent, with pointers. This is the duplication
-  firewall and the "where does it go" resolver.
+  firewall and the "where does it go" resolver. For product integration flows, also inspect both
+  `testng-v2.xml` and `testng-v2_distributed.xml`; product runner/scenario registration and behavior should remain
+  in parity while each topology keeps its own lifecycle listener and block configuration.
 - → gap report.
 
 **Phase 3 — Plan synthesis.** Prioritize by `coverage-gain × regression-value ÷ cost`, where **cost is
@@ -96,15 +98,22 @@ mis-classifying a genuinely-new capability under an existing `@cap`.
   the fix, confirm it **passes**. A test that can't fail on the old code doesn't guard anything.
 - *Integration:* full CLAUDE.md discipline — search-before-write, reuse/extend step definitions (never
   near-duplicate), extend existing feature files where one fits, correct folder + `@cap`, isolation / cleanup /
-  actor rules, `Copyright (c) 2026`, ×2 tenant, strict exact-value assertions. A senior-QA
+  actor rules, `Copyright (c) 2026`, ×2 tenant, strict exact-value assertions. Register each product runner and
+  scenario in both topology suites; preserve topology-specific listeners and block parameters. A genuinely
+  topology-specific framework verification must explain its scoped exception. A senior-QA
   **duplication-minimization pass** precedes every new artifact.
 - *Docs (feature):* where a docs-derived assertion diverges from actual behavior, **surface it** (doc bug vs
   impl bug) — never silently encode one (see `feedback_suspicious_scenario_flag_dont_tweak`).
 
-**Phase 6 — Verify.** Minimal first (unit: affected class(es); integration: scratch/minimal testng with just
-the new block). **Then ask** before the full local suite. Run the full/affected suite with
-`-Dapim.coverage=true` to capture the **coverage delta** as the quantitative re-eval. Blockers (infra gaps like
-"needs a real WSO2 IS container") are surfaced and discussed, parked with a documented reason if unresolved.
+**Phase 6 — Verify.** Minimal first (unit: affected class(es); product integration: focused TestNG suites in
+both all-in-one and distributed topologies, selecting the affected runner(s) while preserving each topology's
+real block configuration). Verify the intended scenarios actually ran by checking reports and counts. Both
+focused topology runs are required before a PR; a disabled/skipped distributed CI lane does not waive the local
+run. If either fails, fix it or report the change as not ready for PR. Distributed JaCoCo collection is
+intentionally unsupported; collect coverage only from all-in-one. **Then ask** before the full local suite. Run
+the full/affected all-in-one suite with `-Dapim.coverage=true` to capture the **coverage delta** as the
+quantitative re-eval. Blockers (infra gaps like "needs a real WSO2 IS container") are surfaced and discussed,
+parked with a documented reason if unresolved.
 
 **Phase 7 — Wrap.** Update `capability-map.yml` + regenerate the coverage tree (mark the new flows covered;
 `render_coverage_tree.py` → `invalid: 0`). Report the coverage delta (unit + integration, before/after).
