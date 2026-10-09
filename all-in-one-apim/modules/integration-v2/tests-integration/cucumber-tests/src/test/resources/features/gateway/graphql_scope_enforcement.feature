@@ -5,12 +5,12 @@ Feature: Gateway GraphQL Operation-Level Security
   the legacy "restart" was incidental): (1) a shared scope attached to the `languages` QUERY operation is
   enforced — a token WITH it queries (200), one WITHOUT it is refused (403); (2) an operation with
   `authType=None` is invocable WITHOUT any token (200). Run in BOTH the super tenant and tenant1.com to prove
-  operation-level security is tenant-agnostic (the tenant API is addressed by its full /t/<tenant> context, and
-  the shared scope is bound to the per-tenant admin role). Runs in the concurrent IntegrationV2-Gateway block
+  operation-level security for least-privileged Publisher users (the tenant API is addressed by its full
+  /t/<tenant> context, and the shared scope is bound to the per-tenant Publisher role). Runs in the concurrent IntegrationV2-Gateway block
   (backend started). Teardown via the per-scenario cleanup hook.
 
   @cap:gateway @feat:graphql-invocation @type:regression @dep:publisher @legacy:GraphqlServerRestartTestCase
-  Scenario Outline: A scope-gated GraphQL operation is enforced (200 with the scope, 403 without) as <actor>
+  Scenario Outline: A scope-gated GraphQL operation is enforced for Publisher <publisherActor> (setup by <actor>)
     Given The system is ready
     And I have valid access tokens as "<actor>"
     When I create a new shared scope as "gqlScopeEnf"
@@ -26,7 +26,7 @@ Feature: Gateway GraphQL Operation-Level Security
     And I extract response field "context" and store it as "gqlApiContext"
     When I update the "apis" resource "gqlApiId" and "gqlPayload" with configuration type "scopes" and value:
       """
-      [{"shared":true,"scope":{"name":"{{gqlScopeName}}","displayName":"{{gqlScopeName}}","description":"graphql scope enforcement","bindings":["admin"]}}]
+      [{"shared":true,"scope":{"name":"{{gqlScopeName}}","displayName":"{{gqlScopeName}}","description":"graphql scope enforcement","bindings":["Internal/publisher"]}}]
       """
     Then The response status code should be 200
     When I retrieve the "apis" resource with id "gqlApiId"
@@ -70,8 +70,10 @@ Feature: Gateway GraphQL Operation-Level Security
     And I subscribe to API "gqlApiId" using application "createdAppId" with payload "apiSubscriptionPayload" as "gqlSubId"
     Then The response status code should be 201
 
-    # A token WITH the scope can query the gated operation (200); one WITHOUT it is refused (403).
-    When I request an OAuth access token for the current user using password grant with scope "{{gqlScopeName}}"
+    # The admin actor provisions the API and application. The password-grant subject is the least-privileged
+    # Publisher user: its role receives the scope and can invoke the gated operation (200); without the scope,
+    # that same Publisher user is refused (403).
+    When I request an OAuth access token using password grant as "<publisherActor>" with scope "{{gqlScopeName}}"
     Then The response status code should be 200
     When I put the following JSON payload in context as "gqlQuery"
     """
@@ -79,16 +81,17 @@ Feature: Gateway GraphQL Operation-Level Security
     """
     And I invoke the API at gateway context "{{gqlApiContext}}/1.0.0" with method "POST" using access token "generatedAccessToken" and payload "gqlQuery" until response status code becomes 200 within 60 seconds
     Then The response status code should be 200
-    And The response should contain "Afrikaans"
-    When I request an OAuth access token for the current user using password grant with scope "openid"
+    And The response body should equal the JSON file "artifacts/payloads/graphql_languages_expected_response.json"
+    And The response should not contain "errors"
+    When I request an OAuth access token using password grant as "<publisherActor>" with scope "openid"
     Then The response status code should be 200
     And I invoke the API at gateway context "{{gqlApiContext}}/1.0.0" with method "POST" using access token "generatedAccessToken" and payload "gqlQuery" until response status code becomes 403 within 60 seconds
     Then The response status code should be 403
 
     Examples:
-      | actor             |
-      | admin             |
-      | admin@tenant1.com |
+      | actor             | publisherActor            |
+      | admin             | publisherUser             |
+      | admin@tenant1.com | publisherUser@tenant1.com |
 
   # Operation-level scope enforcement on the SUBSCRIPTION verb, over graphql-ws — a different enforcement point
   # from the HTTP scenario above. The HTTP path is checked by the synapse handler chain at request time and answers
@@ -107,7 +110,7 @@ Feature: Gateway GraphQL Operation-Level Security
   # its meaning — a 4002 on its own is equally consistent with a broken subscription, a bad deployment or an
   # unrelated authorisation failure. Both organizations exercise this verb and transport path explicitly.
   @cap:gateway @feat:graphql-invocation @rule:subscription @type:regression @dep:publisher @legacy:GraphqlSubscriptionTestCase
-  Scenario Outline: A scope-gated GraphQL SUBSCRIPTION operation is enforced over graphql-ws (data with the scope, 4002 without) as <actor>
+  Scenario Outline: A scope-gated GraphQL SUBSCRIPTION operation is enforced over graphql-ws (data with the scope, 4002 without) for <publisherActor> (setup by <actor>)
     Given The system is ready
     And I have valid access tokens as "<actor>"
     When I create a new shared scope as "gqlSubScopeEnf"
@@ -122,7 +125,7 @@ Feature: Gateway GraphQL Operation-Level Security
     And I extract response field "context" and store it as "gqlSubScopeContext"
     When I update the "apis" resource "gqlSubScopeApiId" and "gqlSubScopePayloadDto" with configuration type "scopes" and value:
       """
-      [{"shared":true,"scope":{"name":"{{gqlSubScopeName}}","displayName":"{{gqlSubScopeName}}","description":"graphql subscription scope enforcement","bindings":["admin"]}}]
+      [{"shared":true,"scope":{"name":"{{gqlSubScopeName}}","displayName":"{{gqlSubScopeName}}","description":"graphql subscription scope enforcement","bindings":["Internal/publisher"]}}]
       """
     Then The response status code should be 200
     # Gate ONLY liftStatusChange; trailStatusChange stays ungated so the difference is the scope, not the API.
@@ -166,21 +169,24 @@ Feature: Gateway GraphQL Operation-Level Security
     """
     And I subscribe to API "gqlSubScopeApiId" using application "createdAppId" with payload "apiSubscriptionPayload" as "gqlSubScopeSubId"
     Then The response status code should be 201
+    When I get the subscription with id "gqlSubScopeSubId"
+    Then The response status code should be 200
+    And The value of response field "status" should be "UNBLOCKED"
 
     # WITH the scope: the subscription is authorised and the backend event arrives.
-    When I request an OAuth access token for the current user using password grant with scope "{{gqlSubScopeName}}"
+    When I request an OAuth access token using password grant as "<publisherActor>" with scope "{{gqlSubScopeName}}"
     Then The response status code should be 200
-    And I invoke the GraphQL subscription at gateway ws context "{{gqlSubScopeContext}}/1.0.0" with query "subscription { liftStatusChange { name } }" using access token "generatedAccessToken" expecting data containing "Astra Express" within 120 seconds
+    And I invoke the GraphQL subscription at gateway ws context "{{gqlSubScopeContext}}/1.0.0" with query "subscription { liftStatusChange { name } }" using access token "generatedAccessToken" expecting exact data frame from JSON file "artifacts/payloads/graphql_subscription_expected_frame.json" within 120 seconds
 
     # WITHOUT it: the very same subscription is refused with the 4002 resource-forbidden frame.
-    When I request an OAuth access token for the current user using password grant with scope "openid"
+    When I request an OAuth access token using password grant as "<publisherActor>" with scope "openid"
     Then The response status code should be 200
     And I invoke the GraphQL subscription at gateway ws context "{{gqlSubScopeContext}}/1.0.0" with query "subscription { liftStatusChange { name } }" using access token "generatedAccessToken" expecting error code 4002 and reason "User is NOT authorized to access the Resource: liftStatusChange. Scope validation failed." within 90 seconds
 
     Examples:
-      | actor             |
-      | admin             |
-      | admin@tenant1.com |
+      | actor             | publisherActor            |
+      | admin             | publisherUser              |
+      | admin@tenant1.com | publisherUser@tenant1.com |
 
   @cap:gateway @feat:graphql-invocation @type:regression @dep:publisher @legacy:GraphqlServerRestartTestCase
   Scenario Outline: A GraphQL operation with authType None is invocable without a token as <actor>
@@ -225,7 +231,8 @@ Feature: Gateway GraphQL Operation-Level Security
     """
     And I invoke the API at gateway context "{{gqlNoneApiContext}}/1.0.0" with method "POST" using access token "gqlNoneEmptyToken" and payload "gqlNoneQuery" until response status code becomes 200 within 60 seconds
     Then The response status code should be 200
-    And The response should contain "Afrikaans"
+    And The response body should equal the JSON file "artifacts/payloads/graphql_languages_expected_response.json"
+    And The response should not contain "errors"
 
     Examples:
       | actor             |

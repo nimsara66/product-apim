@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!-- Focused concurrency run for four independent runners from the standard Publisher block. -->
+<suite name="IntegrationV2-Publisher-Focused-4" parallel="false">
+    <listeners>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockLifecycleListener"/>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockScopeListener"/>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.CoverageAggregationListener"/>
+    </listeners>
+    <test name="IntegrationV2-Publisher-Focused-4" parallel="classes" thread-count="4">
+        <parameter name="blockLabel" value="publisher-focused-4"/>
+        <parameter name="initTenantUsers" value="true"/>
+        <parameter name="initSecondaryUserStore" value="true"/>
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.PublisherLifecycleRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.PublisherScopesRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.PublisherAccessControlRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.PublisherApiVisibilityDomainsRunner"/>
+        </classes>
+    </test>
+</suite>

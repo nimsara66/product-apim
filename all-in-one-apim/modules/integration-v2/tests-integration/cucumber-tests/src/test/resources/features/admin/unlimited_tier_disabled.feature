@@ -79,6 +79,12 @@ Feature: Admin Unlimited Tier Disabled
     # The pre-existing resources declared 50KPerMin explicitly — substitution must not overwrite a declared tier.
     And The value of response field "$.paths['/resource'].get['x-throttling-tier']" should be "50KPerMin"
     And The value of response field "$.paths['/resource'].post['x-throttling-tier']" should be "50KPerMin"
+    # The updated definition must remain publishable with the fallback tier persisted on its new resource.
+    When I publish the "apis" resource with id "utdUpdApiId"
+    Then The lifecycle status of API "utdUpdApiId" should be "Published"
+    When I retrieve the "apis" resource with id "utdUpdApiId"
+    Then The response status code should be 200
+    And Every operation in the response should have throttling policy "10KPerMin"
 
     Examples:
       | actor             |

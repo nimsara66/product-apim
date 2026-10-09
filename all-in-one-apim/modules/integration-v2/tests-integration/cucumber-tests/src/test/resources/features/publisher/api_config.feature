@@ -334,6 +334,10 @@ Feature: Publisher API Runtime & Common Configuration
       Updated without touching the thumbnail
       """
     Then The response status code should be 200
+    # The v4 API DTO exposes the thumbnail state as hasThumbnail; the legacy thumbnailUri field is not writable here.
+    When I retrieve the "apis" resource with id "thumbApiId"
+    Then The response status code should be 200
+    And The value of response field "hasThumbnail" should be "true"
     When I retrieve the thumbnail for API "thumbApiId"
     Then The response status code should be 200
 
@@ -583,7 +587,7 @@ Feature: Publisher API Runtime & Common Configuration
   # Tagged api-config because the subject is context-field fidelity (what the publisher persists and matches for
   # the field as authored), not versioning behaviour. The payload's context is uniquely generated, so the count of 1
   # is exact by construction under parallel execution.
-  @cap:publisher @feat:api-config @rule:context-template @type:regression @legacy:DynamicAPIContextTestCase
+  @cap:publisher @feat:api-config @rule:context-template @type:regression
   Scenario Outline: A templated-context API is found in the publisher by its raw context template as <actor>
     Given The system is ready and I have valid publisher access tokens as "<actor>"
     And I have created an api from "artifacts/payloads/create_apim_templated_context_search_api.json" as "tcApiId" and deployed it
@@ -596,7 +600,7 @@ Feature: Publisher API Runtime & Common Configuration
     # the raw form the API was authored with.
     And I extract response field "context" and store it as "tcApiContext"
     When I search Publisher APIs with content query "context:{{tcApiContext}}/{version}" until the result count is 1 within 60 seconds
-    Then The response should contain "{{tcApiName}}"
+    Then The value of response field "list[0].name" should be "{{tcApiName}}"
 
     Examples:
       | actor                     |
@@ -641,7 +645,7 @@ Feature: Publisher API Runtime & Common Configuration
 
   # BASIC update path: change the production credential via GET-mutate-PUT of endpointConfig; the update response
   # reflects the NEW username, keeps redacting the password, and the old credential is gone. Publisher-plane only.
-  @cap:publisher @feat:api-config @rule:endpoint-security @type:regression @legacy:ChangeEndPointSecurityPerTypeTestCase
+  @cap:publisher @feat:api-config @rule:endpoint-security @type:regression @legacy:ChangeEndPointSecurityPerTypeTestCase @legacy:APITestCase
   Scenario Outline: Updating an API's BASIC endpoint-security credential reflects the change and keeps the secret redacted as <actor>
     Given The system is ready and I have valid publisher access tokens as "<actor>"
     And I put JSON payload from file "artifacts/payloads/create_apim_endpoint_sec_change.json" in context as "epubPayload"

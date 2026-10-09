@@ -24,7 +24,7 @@ Feature: Setup comment threads for the plane-parity suite
   AfterClass sweep (NOT per-scenario cleanup — the consumer features run off this fixture); comments are
   sub-resources of the API and cascade away with it.
 
-  Scenario Outline: Publish three APIs and build a publisher-plane and a devportal-plane comment thread as <actor>
+  Scenario Outline: Publish three APIs and build publisher-plane and devportal-plane comment threads as <actor>
     Given The system is ready
     And I have valid access tokens as "<actor>"
 
@@ -34,6 +34,7 @@ Feature: Setup comment threads for the plane-parity suite
     Then The lifecycle status of API "ptApiId<suffix>" should be "Published"
     When I add a "publisher" comment "This is root comment 1" with category "general" to API "ptApiId<suffix>" as "ptRoot1<suffix>"
     Then The response status code should be 201
+    And The value of response field "entryPoint" should be "PUBLISHER"
     And I wait for timestamp precision after the "publisher" comment "ptRoot1<suffix>" of API "ptApiId<suffix>"
     When I add a "publisher" comment "This is root comment 2" with category "general" to API "ptApiId<suffix>" as "ptRoot2<suffix>"
     Then The response status code should be 201
@@ -54,6 +55,7 @@ Feature: Setup comment threads for the plane-parity suite
     Then The lifecycle status of API "dtApiId<suffix>" should be "Published"
     When I add a "devportal" comment "This is root comment 1" with category "general" to API "dtApiId<suffix>" as "dtRoot1<suffix>"
     Then The response status code should be 201
+    And The value of response field "entryPoint" should be "DEVPORTAL"
     And I wait for timestamp precision after the "devportal" comment "dtRoot1<suffix>" of API "dtApiId<suffix>"
     When I add a "devportal" comment "This is root comment 2" with category "general" to API "dtApiId<suffix>" as "dtRoot2<suffix>"
     Then The response status code should be 201
@@ -75,5 +77,7 @@ Feature: Setup comment threads for the plane-parity suite
 
     Examples:
       | actor             | suffix       |
-      | admin             |              |
+      | superTenantAdmin             |              |
       | admin@tenant1.com | @tenant1.com |
+      | SECONDARY.COM/publisherUser1 | SecondaryStore |
+      | SECONDARY.COM/publisherUser1@tenant1.com | SecondaryStoreTenant |

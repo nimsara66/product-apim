@@ -103,6 +103,8 @@ public class BlockLifecycleListener implements ITestListener {
             "src/test/resources/artifacts/configFiles/emailUserName/deployment.toml";
     /** When {@code true}, onStart provisions tenants/users into the block's own container after readiness. */
     static final String PARAM_INIT_TENANT_USERS = "initTenantUsers";
+    /** When {@code true}, provisions a second non-super tenant for cross-tenant subscription coverage. */
+    static final String PARAM_INIT_CROSS_TENANT_PEER = "initCrossTenantPeer";
     /**
      * FRAMEWORK VERIFICATION ONLY. When {@code true}, provisioning deliberately fails: it targets a tenant
      * domain that was never created on this container, so the user-admin SOAP call is refused and the
@@ -421,6 +423,9 @@ public class BlockLifecycleListener implements ITestListener {
                 provisionTenantUsers(label,
                         Boolean.parseBoolean(param(context, PARAM_INJECT_PROVISIONING_FAILURE)),
                         Boolean.parseBoolean(param(context, PARAM_EMAIL_USER_MODE)));
+            }
+            if (Boolean.parseBoolean(param(context, PARAM_INIT_CROSS_TENANT_PEER))) {
+                provisionCrossTenantPeer();
             }
             // Runtime secondary user store (replaces the seeded .mv.db fixture). After tenant provisioning so the
             // tenant admin SOAP credentials exist. Registered + seeded for BOTH tenants — one shared H2 DB,
@@ -808,6 +813,21 @@ public class BlockLifecycleListener implements ITestListener {
         logger.info("Block '" + label + "' provisioned tenant users"
                 + (emailUserMode ? " with email-form usernames (e.g. "
                         + TenantUserProvisioner.physicalUserName("publisherUser1") + ")" : ""));
+    }
+
+    /**
+     * Adds a second non-super tenant and a subscriber actor for the focused cross-tenant subscription row.
+     * Kept behind a block parameter so unrelated runners retain the standard two-tenant fixture.
+     */
+    private void provisionCrossTenantPeer() throws java.io.IOException, JaxenException, InterruptedException {
+
+        String tenantDomain = "crossconsumer.com";
+        TenantUserProvisioner.addTenant(tenantDomain, "admin", "admin", "Cross", "Consumer",
+                "admin@" + tenantDomain);
+        TenantUserProvisioner.awaitRequiredApimRoles(tenantDomain);
+        TenantUserProvisioner.addUser(tenantDomain, "subscriberUser", "subscriberUser", "subscriberUser",
+                "Internal/subscriber");
+        logger.info("Provisioned cross-tenant peer tenant '" + tenantDomain + "' and subscriber actor");
     }
 
     /**

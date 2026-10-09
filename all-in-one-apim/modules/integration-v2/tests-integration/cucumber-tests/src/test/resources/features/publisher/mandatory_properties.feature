@@ -32,6 +32,8 @@ Feature: Publisher Mandatory Custom API Properties
     # been observed echoing a stale pre-update representation (CI 2026-07-23), so only a re-GET proves the
     # required property was durably persisted.
     And I retrieve the "apis" resource with id "mpApiId" until it contains "PropertyValue" within 60 seconds
+    And The value of response field "additionalPropertiesMap.PropertyName.name" should be "PropertyName"
+    And The value of response field "additionalPropertiesMap.PropertyName.value" should be "PropertyValue"
 
     Examples:
       | actor                     |

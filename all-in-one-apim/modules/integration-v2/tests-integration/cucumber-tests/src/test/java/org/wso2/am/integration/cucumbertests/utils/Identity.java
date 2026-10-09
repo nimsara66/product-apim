@@ -50,6 +50,8 @@ public final class Identity {
      *   <li>{@code "<userKey>"} — a provisioned user under that key in the super tenant</li>
      *   <li>{@code "admin@<domain>"} — the admin of the given tenant</li>
      *   <li>{@code "<userKey>@<domain>"} — a provisioned user under that key in the given tenant</li>
+     *   <li>{@code "superTenantAdmin"} — the block-aware super-tenant administrator: the normal super-tenant
+     *       admin in standard blocks, or the provisioned email-form super-tenant admin in email-user blocks</li>
      * </ul>
      * Resolution is read-only against the shared-scope tenant beans, so it is safe to call concurrently.
      */
@@ -61,6 +63,11 @@ public final class Identity {
         if (at >= 0) {
             domain = key.substring(at + 1);
             key = key.substring(0, at);
+        }
+
+        if ("superTenantAdmin".equals(key) && Constants.SUPER_TENANT_DOMAIN.equals(domain)) {
+            boolean emailUserMode = Boolean.TRUE.equals(TestContext.get(TenantUserProvisioner.EMAIL_USER_MODE_KEY));
+            key = emailUserMode ? Constants.EMAIL_ADMIN_USER_KEY : Constants.ADMIN_USER_KEY;
         }
 
         Tenant tenant = Utils.getTenantFromContext(domain);

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Gateway REST Artifacts isolated overlay verification" parallel="tests" thread-count="1">
+    <listeners>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.DistributedLifecycleListener"/>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockScopeListener"/>
+    </listeners>
+    <test name="Gateway artifacts standard" parallel="classes" thread-count="1">
+        <parameter name="blockLabel" value="gateway-artifacts-standard-fix"/>
+        <parameter name="initTenantUsers" value="true"/>
+        <parameter name="initSecondaryUserStore" value="true"/>
+        <parameter name="initBackend" value="true"/>
+        <parameter name="tomlExtraOverlayPath.cp" value="src/test/resources/artifacts/configFiles/gatewayRestArtifacts/distributed-shared-encryption-overlay.toml"/>
+        <parameter name="tomlExtraOverlayPath.tm" value="src/test/resources/artifacts/configFiles/gatewayRestArtifacts/distributed-shared-encryption-overlay.toml"/>
+        <parameter name="tomlExtraOverlayPath.gateway" value="src/test/resources/artifacts/configFiles/gatewayRestArtifacts/distributed-gateway-overlay.toml"/>
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayRestArtifactsRunner"/>
+        </classes>
+    </test>
+    <test name="Gateway artifacts email" parallel="classes" thread-count="1">
+        <parameter name="blockLabel" value="gateway-artifacts-email-fix"/>
+        <parameter name="initTenantUsers" value="true"/>
+        <parameter name="initSecondaryUserStore" value="true"/>
+        <parameter name="initBackend" value="true"/>
+        <parameter name="emailUserMode" value="true"/>
+        <parameter name="tomlExtraOverlayPath.cp" value="src/test/resources/artifacts/configFiles/gatewayRestArtifacts/distributed-shared-encryption-overlay.toml"/>
+        <parameter name="tomlExtraOverlayPath.tm" value="src/test/resources/artifacts/configFiles/gatewayRestArtifacts/distributed-shared-encryption-overlay.toml"/>
+        <parameter name="tomlExtraOverlayPath.gateway" value="src/test/resources/artifacts/configFiles/gatewayRestArtifacts/distributed-gateway-overlay.toml"/>
+        <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayRestArtifactsRunner"/>
+        </classes>
+    </test>
+</suite>

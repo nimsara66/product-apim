@@ -75,7 +75,14 @@ Feature: Gateway Mutual-SSL Certificate Chain Validation
     Then The response status code should be 200
 
     # The DEFAULT-VERSION (versionless) context dispatches through a different gateway routing path, so it gets
-    # its own chance to skip the check — asserted for the chain case too.
+    # its own checks too. First prove a certificate uploaded directly to this API still succeeds there.
+    When I invoke the API at gateway context "{{chainContext}}/customers/123" presenting client certificate "artifacts/certs/mutualssl/cert_chain_root.p12" until response status code becomes 200 within 60 seconds
+    Then The response status code should be 200
+    # Then prove the versionless route still rejects a certificate whose issuer path never reaches the uploaded
+    # root, just like the versioned route below.
+    When I invoke the API at gateway context "{{chainContext}}/customers/123" presenting client certificate "artifacts/certs/mutualssl/test.p12" until response status code becomes 401 within 60 seconds
+    Then The response status code should be 401
+    # It must also accept a leaf presented with its full chain.
     When I invoke the API at gateway context "{{chainContext}}/customers/123" presenting client certificate "artifacts/certs/mutualssl/cert_chain_client.p12" until response status code becomes 200 within 60 seconds
     Then The response status code should be 200
 

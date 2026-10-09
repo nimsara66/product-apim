@@ -113,10 +113,17 @@ public final class PlaywrightSsoClient implements AutoCloseable {
         routes.put("wso2am:9443", apim);       // APIM network alias (if ever emitted)
         routes.put("apim-cp:9443", apim);      // Distributed CP hostname emitted by console redirects
         routes.put("wso2is:9443", is);         // federated IdP authorize/token host
+        // Testcontainers normally returns localhost for host-mapped URLs. Some Docker hosts (for example Colima)
+        // require TESTCONTAINERS_HOST_OVERRIDE, which changes those URLs to the host IP. The browser can start at
+        // that mapped authority before APIM redirects it to the stable internal hostname above, so route both.
+        addMappedAuthorityRoute(routes, apimMappedBase, apim);
+        addMappedAuthorityRoute(routes, isMappedBase, is);
         if (gatewayMappedBase != null && !gatewayMappedBase.isBlank()) {
             // The API's deployed gateway URL is https://localhost:8243/<context> (VHost "localhost"); tunnel it to
             // the mapped gateway port so the browser can invoke the API end to end.
-            routes.put("localhost:8243", addressOf(gatewayMappedBase));
+            InetSocketAddress gateway = addressOf(gatewayMappedBase);
+            routes.put("localhost:8243", gateway);
+            addMappedAuthorityRoute(routes, gatewayMappedBase, gateway);
             gatewayRouted = true;
         }
         ConnectProxy createdProxy = new ConnectProxy(routes);
@@ -191,6 +198,18 @@ public final class PlaywrightSsoClient implements AutoCloseable {
                 // response object may be gone; ignore
             }
         });
+    }
+
+    /** Adds the exact host:port a browser sees in a Testcontainers mapped URL as an alternate proxy route. */
+    private static void addMappedAuthorityRoute(Map<String, InetSocketAddress> routes, String mappedBase,
+            InetSocketAddress mappedAddress) {
+        if (mappedBase == null || mappedBase.isBlank()) {
+            return;
+        }
+        URI uri = URI.create(mappedBase);
+        if (uri.getHost() != null && uri.getPort() > 0) {
+            routes.put(uri.getHost() + ":" + uri.getPort(), mappedAddress);
+        }
     }
 
     private static InetSocketAddress addressOf(String url) {
@@ -441,6 +460,41 @@ public final class PlaywrightSsoClient implements AutoCloseable {
         // The submit kicks off the federated return, JIT provisioning and the console callback exchange;
         // assertLandedInConsole polls the cookie store for the resulting session cookie.
         assertNot17744();
+    }
+
+    /**
+     * Drives an OAuth authorization-code request through APIM's federated OIDC authenticator and the real external
+     * Identity Server, returning the final client redirect that carries the authorization code.
+     */
+    public String authorizeOAuthClientThroughExternalIs(String authorizeUrl, String callbackUrl, String username,
+            String password) {
+        try {
+            page.navigate(authorizeUrl, new Page.NavigateOptions()
+                    .setWaitUntil(WaitUntilState.COMMIT));
+        } catch (RuntimeException navigationError) {
+            // APIM may complete the final callback redirect to a non-page OAuth callback. The URL is still captured
+            // by the browser; defer judgment to the explicit code-bearing URL check below.
+            log.debug("OAuth authorize navigation ended during redirect: " + navigationError.getMessage());
+        }
+        try {
+            page.waitForSelector("input[type=password]", new Page.WaitForSelectorOptions().setTimeout(30000));
+        } catch (com.microsoft.playwright.TimeoutError e) {
+            throw new AssertionError("The federated OAuth flow did not reach the external Identity Server login. "
+                    + pageDiagnostic(), e);
+        }
+        fillFirst(username, "input[name=username]", "#username", "input#usernameUserInput", "input[type=text]");
+        fillFirst(password, "input[name=password]", "#password", "input[type=password]");
+        clickFirst("button[type=submit]", "input[type=submit]", "#loginForm button",
+                "button:has-text(\"Sign In\")", "button:has-text(\"Continue\")");
+
+        try {
+            page.waitForURL(url -> url.startsWith(callbackUrl) && url.contains("code="),
+                    new Page.WaitForURLOptions().setTimeout(60000));
+        } catch (com.microsoft.playwright.TimeoutError e) {
+            throw new AssertionError("Federated login did not return an authorization code to '" + callbackUrl
+                    + "'. Final browser URL: " + page.url() + "; " + pageDiagnostic(), e);
+        }
+        return page.url();
     }
 
     /** Lenient wait for the current navigation to reach LOAD — never fails the step on a redirect-chain timeout. */

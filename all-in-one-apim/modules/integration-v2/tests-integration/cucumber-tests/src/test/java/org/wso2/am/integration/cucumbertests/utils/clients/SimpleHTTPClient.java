@@ -228,6 +228,43 @@ public class SimpleHTTPClient {
     }
 
     /**
+     * GET with a per-request response timeout, used only when the timeout itself is the assertion target. It does
+     * not retry: retrying a deliberate timeout could send a second request and make the result meaningless.
+     */
+    public org.wso2.carbon.automation.test.utils.http.client.HttpResponse doGetWithSocketTimeout(
+            String url, Map<String, String> headers, int socketTimeoutMillis) throws IOException {
+
+        if (socketTimeoutMillis <= 0) {
+            throw new IllegalArgumentException("Socket timeout must be positive");
+        }
+        HttpGet request = new HttpGet(url);
+        request.setConfig(RequestConfig.custom()
+                .setRedirectsEnabled(false)
+                .setSocketTimeout(socketTimeoutMillis)
+                .build());
+        setHeaders(headers, request);
+        try (CloseableHttpResponse response = client.execute(request)) {
+            return constructResponse(response);
+        }
+    }
+
+    /** GET variant that preserves additional repeated headers and their caller-specified order. */
+    public org.wso2.carbon.automation.test.utils.http.client.HttpResponse doGet(String url,
+            Map<String, String> headers, List<Header> additionalHeaders) throws IOException {
+
+        return withGeneralErrorRetry(() -> {
+            HttpGet request = new HttpGet(url);
+            setHeaders(headers, request);
+            if (additionalHeaders != null) {
+                additionalHeaders.forEach(request::addHeader);
+            }
+            try (CloseableHttpResponse response = client.execute(request)) {
+                return constructResponse(response);
+            }
+        });
+    }
+
+    /**
      * GETs a URL and writes the raw response body BYTES to a temp file, returning it. Needed for binary payloads
      * (e.g. an API export archive zip) that {@link #doGet} would corrupt by decoding the body as a UTF-8 String.
      * The HTTP status is returned separately so callers can assert it. On a non-2xx status the (text) error body
@@ -630,10 +667,12 @@ public class SimpleHTTPClient {
                     File file = fileEntry.getValue();
                     if (file != null) {
                         String fileName = file.getName();
+                        ContentType fileContentType = fileName.toLowerCase(Locale.ROOT).endsWith(".zip")
+                                ? ContentType.create("application/zip") : ContentType.APPLICATION_OCTET_STREAM;
                         builder.addBinaryBody(
                                 fileEntry.getKey(),
                                 file,
-                                ContentType.APPLICATION_OCTET_STREAM,
+                                fileContentType,
                                 fileName
                         );
                     }

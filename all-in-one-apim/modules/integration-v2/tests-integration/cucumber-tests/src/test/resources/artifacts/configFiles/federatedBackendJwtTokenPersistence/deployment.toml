@@ -1,0 +1,44 @@
+# Overlay for rerunning FederatedBackendJwtRunner with OAuth token persistence enabled.
+#
+# It combines the backend-JWT and application-attribute settings required by the federated feature with the
+# token-persistence setting used by the token-persistence suites. Kept in its own isolated block so the
+# application-attribute requirements do not affect unrelated token-persistence scenarios.
+
+[apim.jwt]
+enable = true
+encoding = "base64"
+claim_dialect = "http://wso2.org/claims"
+header = "X-JWT-Assertion"
+signing_algorithm = "SHA256withRSA"
+
+[apim.devportal]
+enable_empty_values_in_application_attributes = true
+
+[[apim.devportal.application_attributes]]
+required = true
+hidden = false
+name = "External Reference Id"
+description = "External Reference Id"
+
+[[apim.devportal.application_attributes]]
+required = false
+hidden = false
+name = "Optional attribute"
+description = "Description of Optional attribute"
+
+[[apim.devportal.application_attributes]]
+required = true
+hidden = false
+default = "Yes"
+name = "Sandbox access required"
+description = "Does this Application require access to APIs in the Sandbox environment ? (Yes or No)"
+
+[[apim.devportal.application_attributes]]
+required = true
+hidden = false
+default = "Yes"
+name = "Production access required"
+description = "Does this Application require access to APIs in the Production environment ? (Yes or No)"
+
+[oauth.token_persistence]
+enable = true

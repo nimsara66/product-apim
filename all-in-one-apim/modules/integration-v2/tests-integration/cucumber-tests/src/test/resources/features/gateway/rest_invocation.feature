@@ -2,10 +2,10 @@
 Feature: Gateway REST API Invocation
 
   Gateway-plane runtime invocation of a published REST API: subscribe an application, obtain an access
-  token, and invoke the API through the gateway expecting a 200. This is the gateway counterpart of the
-  publisher-plane create/publish features (which assert only publisher outcomes). Runs in both the super
-  tenant and tenant1.com as the tenant admin (the flow spans publish + subscribe + invoke). Teardown via
-  the per-scenario cleanup hook.
+  token, and invoke the API through the gateway, checking both a normal 200 response and backend 204
+  propagation. This is the gateway counterpart of the publisher-plane create/publish features (which assert
+  only publisher outcomes). Runs in both the super tenant and tenant1.com as the tenant admin (the flow spans
+  publish + subscribe + invoke). Teardown via the per-scenario cleanup hook.
 
   @cap:gateway @feat:rest-invocation @type:smoke @dep:publisher @legacy:APIMANAGERInvocationTestCase
   Scenario Outline: Invoke a published REST API through the gateway as <actor>
@@ -31,6 +31,36 @@ Feature: Gateway REST API Invocation
     Then The response status code should be 200
     And The value of response field "id" should be "123"
     And The value of response field "name" should be "John"
+
+  Examples:
+      | actor             |
+      | admin             |
+      | admin@tenant1.com |
+
+  # The shared Node backend returns 204 with no body for process-instance DELETE and HEAD. Exercising HEAD here
+  # reproduces GIT2231's gateway path: the original failure was triggered when the backend's HEAD response had no
+  # content. Keep the existing DELETE assertion as well, so this extends rather than replaces the 204 coverage.
+  @cap:gateway @feat:rest-invocation @type:regression @dep:publisher @legacy:APIMANAGER4464BackendReturningStatusCode204TestCase @legacy:GIT2231HeadRequestNPEErrorTestCase
+  Scenario Outline: The gateway preserves a backend 204 response for DELETE and HEAD as <actor>
+    Given The system is ready
+    And I have valid access tokens as "<actor>"
+    And I have created an api from "artifacts/payloads/create_apim_204_api.json" as "api204Id" and deployed it
+    When I publish the "apis" resource with id "api204Id"
+    Then The lifecycle status of API "api204Id" should be "Published"
+    When I retrieve the "apis" resource with id "api204Id"
+    Then The response status code should be 200
+    And I extract response field "context" and store it as "api204Context"
+
+    # The standard key setup subscribes the app and waits for the API to become available through the gateway.
+    When I have set up application with keys, subscribed to API "api204Id" with plan "Unlimited", and obtained access token for "api204SubscriptionId"
+    Then The response status code should be 200
+    When I invoke the API at gateway context "{{api204Context}}/1.0.0/process-instances/123" with method "DELETE" using access token "generatedAccessToken" and payload "" until response status code becomes 204 within 60 seconds
+    Then The response status code should be 204
+    And The response body should be empty
+
+    When I invoke the API at gateway context "{{api204Context}}/1.0.0/process-instances/123" with method "HEAD" using access token "generatedAccessToken" and payload "" until response status code becomes 204 within 60 seconds
+    Then The response status code should be 204
+    And The response body should be empty
 
     Examples:
       | actor             |
@@ -112,6 +142,74 @@ Feature: Gateway REST API Invocation
       | actor             | tenant       | withUser            | withoutUser            |
       | admin             | carbon.super | c14with             | c14without             |
       | admin@tenant1.com | tenant1.com  | c14with@tenant1.com | c14without@tenant1.com |
+
+  # Complete the API-local scope × principal-role × requested/omitted-scope × HTTP-method matrix from
+  # APIScopeTestCase. The GET scope belongs to Internal/subscriber; the POST scope belongs only to admin. Each
+  # principal requests both scopes or neither, and both methods are invoked once after explicit gateway readiness.
+  # This complements (and does not replace) the separate overlapping-path method-scope scenarios below.
+  @cap:gateway @feat:security-enforcement @rule:local-scope-role-matrix @type:regression @dep:publisher @legacy:APIScopeTestCase
+  Scenario Outline: API-local scopes enforce the role and method matrix as <principal> under <ownerActor>
+    Given The system is ready
+    And I have valid access tokens as "<ownerActor>"
+    And I have created an api from "artifacts/payloads/create_apim_local_scope_role_matrix_api.json" as "lsrmApiId" and deployed it
+    And the "apis" resource "lsrmApiId" should be live on the gateway, redeploying if propagation is lost
+    When I publish the "apis" resource with id "lsrmApiId"
+    Then The lifecycle status of API "lsrmApiId" should be "Published"
+    When I retrieve the "apis" resource with id "lsrmApiId"
+    Then The response status code should be 200
+    And The response array field "operations" should have exactly 2 entries
+    And The response field "scopes[?(@.scope.name=='local_get_scope')].scope.bindings[*]" should be exactly the list "Internal/subscriber"
+    And The response field "scopes[?(@.scope.name=='local_post_scope')].scope.bindings[*]" should be exactly the list "admin"
+    And The response field "operations[?(@.verb=='GET')].scopes[*]" should be exactly the list "local_get_scope"
+    And The response field "operations[?(@.verb=='POST')].scopes[*]" should be exactly the list "local_post_scope"
+    And I extract response field "context" and store it as "lsrmContext"
+
+    When I put JSON payload from file "artifacts/payloads/create_apim_test_app.json" in context as "lsrmAppPayload"
+    And I create an application with payload "lsrmAppPayload"
+    Then The response status code should be 201
+    When I put the following JSON payload in context as "lsrmKeysPayload"
+    """
+    {"keyType":"PRODUCTION","grantTypesToBeSupported":["client_credentials","password"]}
+    """
+    And I generate client credentials for application id "createdAppId" with payload "lsrmKeysPayload"
+    Then The response status code should be 200
+    When I put the following JSON payload in context as "lsrmSubscriptionPayload"
+    """
+    {"applicationId":"{{applicationId}}","apiId":"{{apiId}}","throttlingPolicy":"Unlimited"}
+    """
+    And I subscribe to API "lsrmApiId" using application "createdAppId" with payload "lsrmSubscriptionPayload" as "lsrmSubscriptionId"
+    Then The response status code should be 201
+
+    When I request an OAuth access token using password grant as "<principal>" with scope "<requestedScopes>"
+    Then The response status code should be 200
+    And The issued token scope list should include "<includedScopes>" and exclude "<excludedScopes>"
+    And I copy context value "generatedAccessToken" to "lsrmAccessToken"
+    When I invoke the API at gateway context "{{lsrmContext}}/1.0.0/comp/cartes/op/123" once with method "GET" using access token "lsrmAccessToken" and payload ""
+    Then The gateway invocation should return HTTP <getStatus> and, when successful, identify method "GET" and path "/jaxrs_basic/services/customers/customerservice/verb-echo/comp/cartes/op/123"
+    When I invoke the API at gateway context "{{lsrmContext}}/1.0.0/comp/cartes/op/123" once with method "POST" using access token "lsrmAccessToken" and payload ""
+    Then The gateway invocation should return HTTP <postStatus> and, when successful, identify method "POST" and path "/jaxrs_basic/services/customers/customerservice/verb-echo/comp/cartes/op/123"
+
+    # In addition to exercising SECONDARY.COM subscribers directly, these rows make a secondary-store publisher
+    # the API owner so the same scope grant/denial assertions run across a store boundary. The same runner also
+    # executes this matrix in email-user mode.
+    Examples:
+      | ownerActor        | principal                                     | requestedScopes                  | includedScopes                  | excludedScopes                   | getStatus | postStatus |
+      | admin             | admin                                         | local_get_scope local_post_scope | default,local_get_scope,local_post_scope |                                  | 200       | 200        |
+      | admin             | admin                                         |                                 | default                          | local_get_scope,local_post_scope | 403       | 403        |
+      | admin             | subscriberUser                                | local_get_scope local_post_scope | default,local_get_scope          | local_post_scope                 | 200       | 403        |
+      | admin             | subscriberUser                                |                                 | default                          | local_get_scope,local_post_scope | 403       | 403        |
+      | admin             | SECONDARY.COM/subscriberUser1                 | local_get_scope local_post_scope | default,local_get_scope          | local_post_scope                 | 200       | 403        |
+      | admin             | SECONDARY.COM/subscriberUser1                 |                                 | default                          | local_get_scope,local_post_scope | 403       | 403        |
+      | admin@tenant1.com | admin@tenant1.com                             | local_get_scope local_post_scope | default,local_get_scope,local_post_scope |                                  | 200       | 200        |
+      | admin@tenant1.com | admin@tenant1.com                             |                                 | default                          | local_get_scope,local_post_scope | 403       | 403        |
+      | admin@tenant1.com | subscriberUser@tenant1.com                    | local_get_scope local_post_scope | default,local_get_scope          | local_post_scope                 | 200       | 403        |
+      | admin@tenant1.com | subscriberUser@tenant1.com                    |                                 | default                          | local_get_scope,local_post_scope | 403       | 403        |
+      | admin@tenant1.com | SECONDARY.COM/subscriberUser1@tenant1.com      | local_get_scope local_post_scope | default,local_get_scope          | local_post_scope                 | 200       | 403        |
+      | admin@tenant1.com | SECONDARY.COM/subscriberUser1@tenant1.com      |                                 | default                          | local_get_scope,local_post_scope | 403       | 403        |
+      | SECONDARY.COM/publisherUser1 | SECONDARY.COM/subscriberUser1 | local_get_scope local_post_scope | default,local_get_scope | local_post_scope | 200 | 403 |
+      | SECONDARY.COM/publisherUser1 | SECONDARY.COM/subscriberUser1 |                                 | default                 | local_get_scope,local_post_scope | 403 | 403 |
+      | SECONDARY.COM/publisherUser1@tenant1.com | SECONDARY.COM/subscriberUser1@tenant1.com | local_get_scope local_post_scope | default,local_get_scope | local_post_scope | 200 | 403 |
+      | SECONDARY.COM/publisherUser1@tenant1.com | SECONDARY.COM/subscriberUser1@tenant1.com |                                 | default                 | local_get_scope,local_post_scope | 403 | 403 |
 
   # Re-imported API is functionally invocable end-to-end: create an API, subscribe and INVOKE it (200) through
   # the gateway BEFORE export; then export -> delete -> re-import; deploy + publish the re-imported API,
@@ -241,8 +339,8 @@ Feature: Gateway REST API Invocation
   # of the path (api/developer/{version}) deploys with the version resolved into that position and is invocable at
   # api/developer/1.0.0/... . Distinct from the version-FIRST case above (where {version} leads); here the template
   # variable sits mid-path. The publisher returns the template verbatim; the gateway resolves {version} at deploy,
-  # so it is substituted for the invocation URL. (The legacy search-by-templated-context assertion is a thin
-  # publisher-search facet not ported here — the routing of the templated context is the regression subject.)
+  # so it is substituted for the invocation URL. The publisher search facet is covered in api_config.feature; this
+  # scenario verifies both the current request shape and the legacy XML-negotiated shape against the same API.
   @cap:gateway @feat:rest-invocation @rule:dynamic-context @type:regression @dep:publisher @legacy:DynamicAPIContextTestCase
   Scenario Outline: An API with a mid-path {version} context template is invocable at the resolved context as <actor>
     Given The system is ready
@@ -255,11 +353,11 @@ Feature: Gateway REST API Invocation
     And I replace "{version}" with "1.0.0" in context "dcContext"
     When I have set up application with keys, subscribed to API "dcApiId", and obtained access token for "dcSub"
     Then The response status code should be 200
-    # As above: the mid-path {version} resolution is only proven if the call reaches the backend, so pin the body.
-    When I invoke the API at gateway context "{{dcContext}}/customers/123/" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 60 seconds
-    Then The response status code should be 200
-    And The value of response field "id" should be "123"
-    And The value of response field "name" should be "John"
+    # Both requests must reach the backend and return the expected customer body.
+    When I invoke the API at gateway context "{{dcContext}}" with access token "generatedAccessToken" using these request variants:
+      | pathSuffix       | accept   | responseFormat | id  | name |
+      | /customers/123/  |          | json           | 123 | John |
+      | /customers/123   | text/xml | xml            | 123 | John |
 
     Examples:
       | actor             |
@@ -428,6 +526,66 @@ Feature: Gateway REST API Invocation
       | admin             |
       | admin@tenant1.com |
 
+  # Legacy HttpPATCHSupportTestCase maps PATCH to the wildcard/root path "/*" and invokes the API without a
+  # resource suffix. Keep this separate from the named /reflect-body PATCH above: it verifies wildcard dispatch at
+  # the API root, then confirms the request body reaches the backend echo route.
+  @cap:gateway @feat:rest-invocation @type:regression @dep:publisher @legacy:HttpPATCHSupportTestCase
+  Scenario Outline: A PATCH request to an API root wildcard is routed to the backend as <actor>
+    Given The system is ready
+    And I have valid access tokens as "<actor>"
+    And I have created an api from "artifacts/payloads/create_apim_wildcard_patch_api.json" as "wpApiId" and deployed it
+    When I publish the "apis" resource with id "wpApiId"
+    Then The lifecycle status of API "wpApiId" should be "Published"
+    When I retrieve the "apis" resource with id "wpApiId"
+    Then The response status code should be 200
+    And The response array field "operations" should have exactly 1 entries
+    And The response field "operations[?(@.verb=='PATCH')].target" should be exactly the list "/*"
+    And I extract response field "context" and store it as "wpContext"
+    When I have set up application with keys, subscribed to API "wpApiId", and obtained access token for "wpSubId"
+    Then The response status code should be 200
+
+    When I put the following JSON payload in context as "wpPatchBody"
+    """
+    {"first":"Greg"}
+    """
+    When I invoke the API at gateway context "{{wpContext}}/1.0.0" with method "PATCH" using access token "generatedAccessToken" and payload "wpPatchBody" with request header "Accept" set to "application/json" until response status code becomes 200 within 60 seconds
+    Then The response status code should be 200
+    And The response should contain "{\"first\":\"Greg\"}"
+
+    Examples:
+      | actor             |
+      | admin             |
+      | admin@tenant1.com |
+
+  # The legacy YouTube sample sends GET /youtube/1.0.0/most_popular to an external Atom feed and checks the feed's
+  # XML markers. Use a deterministic local feed fixture at the same upstream path so this covers the gateway's
+  # feed request and XML response without depending on the retired public YouTube Data API.
+  @cap:gateway @feat:rest-invocation @type:regression @dep:publisher @legacy:YouTubeAPITestCase
+  Scenario Outline: A published YouTube-feed API returns its Atom XML markers as <actor>
+    Given The system is ready
+    And I have valid access tokens as "<actor>"
+    And I have created an api from "artifacts/payloads/create_apim_youtube_feed_api.json" as "ytApiId" and deployed it
+    When I publish the "apis" resource with id "ytApiId"
+    Then The lifecycle status of API "ytApiId" should be "Published"
+    When I retrieve the "apis" resource with id "ytApiId"
+    Then The response status code should be 200
+    And The response array field "operations" should have exactly 1 entries
+    And The response field "operations[?(@.verb=='GET')].target" should be exactly the list "/*"
+    And I extract response field "context" and store it as "ytContext"
+    When I have set up application with keys, subscribed to API "ytApiId", and obtained access token for "ytSubId"
+    Then The response status code should be 200
+
+    When I invoke the API at gateway context "{{ytContext}}/1.0.0/most_popular" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 60 seconds
+    Then The response status code should be 200
+    And The response should contain "<feed"
+    And The response should contain "<category"
+    And The response should contain "<entry>"
+
+    Examples:
+      | actor             |
+      | admin             |
+      | admin@tenant1.com |
+
   # Endpoint routing by token type: an API with distinct production and sandbox endpoints routes a PRODUCTION
   # token to the production endpoint and a SANDBOX token to the sandbox endpoint. Each endpoint echoes its path,
   # so the response body reveals which backend was hit. Ports the routing case of
@@ -530,6 +688,7 @@ Feature: Gateway REST API Invocation
     When I invoke the API at gateway context "{{poContext}}/1.0.0/x" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 403 within 60 seconds
     Then The response status code should be 403
     And The error response should have code "900901" message "Runtime Error" and description containing "Sandbox key offered to the API with no sandbox endpoint"
+    And The value of error response field "type" should be "Status report"
 
     Examples:
       | actor             |
@@ -570,6 +729,7 @@ Feature: Gateway REST API Invocation
     When I invoke the API at gateway context "{{soContext}}/1.0.0/x" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 403 within 60 seconds
     Then The response status code should be 403
     And The error response should have code "900901" message "Runtime Error" and description containing "Production key offered to the API with no production endpoint"
+    And The value of error response field "type" should be "Status report"
 
     Examples:
       | actor             |
@@ -956,9 +1116,34 @@ Feature: Gateway REST API Invocation
       | admin             |
       | admin@tenant1.com |
 
+  # Keep the caller's read deadline shorter than the deterministic upstream response delay. After the caller times
+  # out, wait for the backend completion marker before teardown; this exercises the late-response path without a
+  # three-minute fixed wait, and fails on any client-side NullPointerException or unrelated connection failure.
+  @cap:gateway @feat:rest-invocation @rule:request-timeout @type:regression @dep:publisher @legacy:APIM4312NPEAfterRequestTimeoutTestCase
+  Scenario Outline: A delayed API response times out cleanly as <actor>
+    Given The system is ready and I have valid publisher access tokens as "<actor>"
+    And I generate a unique alphanumeric value and store it as "timeoutRequestId"
+    When I put JSON payload from file "artifacts/payloads/create_apim_timeout_probe_api.json" in context as "timeoutProbeApiPayload"
+    And I create an "apis" resource with payload "timeoutProbeApiPayload" as "timeoutProbeApiId"
+    Then The response status code should be 201
+    When I deploy the API with id "timeoutProbeApiId"
+    Then The response status code should be 201
+    When I publish the "apis" resource with id "timeoutProbeApiId"
+    Then The lifecycle status of API "timeoutProbeApiId" should be "Published"
+    When I retrieve the "apis" resource with id "timeoutProbeApiId"
+    And I extract response field "context" and store it as "timeoutProbeApiContext"
+    And the "apis" resource "timeoutProbeApiId" should be live on the gateway, redeploying if propagation is lost
+    When I invoke the API at gateway context "{{timeoutProbeApiContext}}/1.0.0/timeout-probe/{{timeoutRequestId}}" without authentication and expect a socket timeout within 2000 milliseconds
+    Then the delayed backend should complete request "timeoutRequestId" within 20 seconds
+
+    Examples:
+      | actor             |
+      | admin             |
+      | admin@tenant1.com |
+
   # The gateway forwards a backend Location response header: an ABSOLUTE Location is forwarded without a doubled
-  # slash, and a RELATIVE Location is preserved. Ports LocationHeaderTestCase + RelativeUrlLocationHeaderTestCase.
-  @cap:gateway @feat:header-transformation @rule:location-header @type:regression @dep:publisher @legacy:LocationHeaderTestCase @legacy:RelativeUrlLocationHeaderTestCase
+  # slash, and a RELATIVE Location is preserved. Ports the managed-API behavior of RelativeUrlLocationHeaderTestCase.
+  @cap:gateway @feat:header-transformation @rule:location-header @type:regression @dep:publisher @legacy:RelativeUrlLocationHeaderTestCase
   Scenario Outline: The gateway forwards the backend Location header (absolute and relative) as <actor>
     Given The system is ready
     And I have valid access tokens as "<actor>"
@@ -985,6 +1170,17 @@ Feature: Gateway REST API Invocation
       | actor             |
       | admin             |
       | admin@tenant1.com |
+
+  # LocationHeaderTestCase installs an anonymous static Synapse route, then makes a GET with no access token. Keep
+  # this separate from the managed-API cases above so it verifies Location forwarding through the legacy route type.
+  @static-synapse-route @cap:gateway @feat:header-transformation @rule:location-header-static-anonymous @type:regression @legacy:LocationHeaderTestCase
+  Scenario: An anonymous static Synapse route forwards its absolute Location header without a doubled slash
+    Given The system is ready
+    When I install the legacy static Location-header Synapse route at context "/locationheader"
+    When I invoke the API at gateway context "/locationheader/" with method "GET" without authentication until response status code becomes 200 within 60 seconds
+    Then The response status code should be 200
+    And The response header "Location" should end with "/abc/domain"
+    And The response header "Location" should not end with "//abc/domain"
 
   # Trailing-slash equivalence: a deployed resource is routed the same WITH and WITHOUT a trailing slash — both
   # match the same uri-template resource and return 200 (APIMANAGER-769 / APIMANAGER-4194). Ports
@@ -1013,10 +1209,26 @@ Feature: Gateway REST API Invocation
     And The value of response field "id" should be "123"
     And The value of response field "name" should be "John"
 
-    Examples:
+  Examples:
       | actor             |
       | admin             |
       | admin@tenant1.com |
+
+  # URLMappingRESTTestCase installs a static Synapse API outside the Publisher API registry, then requests its
+  # fixed /test resource with a trailing slash. Install the same static route through ConfigServiceAdmin and
+  # remove only that route after the scenario so the test cannot leak gateway configuration.
+  @static-synapse-route @cap:gateway @feat:rest-invocation @rule:static-synapse-trailing-slash @type:regression @legacy:URLMappingRESTTestCase
+  Scenario Outline: A static Synapse URL-mapping route accepts a trailing slash in the <domain> context
+    Given The system is ready
+    When I install the legacy static URL-mapping Synapse route at context "<staticContext>"
+    When I invoke the API at gateway context "<staticContext>/test/" with method "GET" without authentication until response status code becomes 200 within 60 seconds
+    Then The response status code should be 200
+    And The response should contain "<symbol>IBM</symbol>"
+
+    Examples:
+      | domain       | staticContext                  | symbol |
+      | super-tenant | /urlmapping/1.0.0              | symbol |
+      | tenant1.com  | /t/tenant1.com/urlmapping/1.0.0 | symbol |
 
   # Reserved-character encoding during uri-template endpoint expansion. Ports the path-param cases of
   # UriTemplateReservedCharacterEncodingTest. The resource uses RFC-6570 reserved expansion (target "/{+val}"),

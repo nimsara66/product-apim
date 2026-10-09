@@ -78,6 +78,12 @@
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- Carbon SOAP APIs used to upload the legacy CAR fixture. -->
+        <dependency>
+            <groupId>org.wso2.carbon.commons</groupId>
+            <artifactId>org.wso2.carbon.application.mgt.stub</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>io.cucumber</groupId>
             <artifactId>cucumber-picocontainer</artifactId>
