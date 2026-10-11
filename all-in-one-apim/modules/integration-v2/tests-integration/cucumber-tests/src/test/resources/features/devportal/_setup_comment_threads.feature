@@ -53,6 +53,9 @@ Feature: Setup comment threads for the plane-parity suite
     When I have created an api from "artifacts/payloads/create_apim_test_api.json" as "dtApiId<suffix>" and deployed it
     And I publish the "apis" resource with id "dtApiId<suffix>"
     Then The lifecycle status of API "dtApiId<suffix>" should be "Published"
+    And I act as "<devportalActor>"
+    And I have a valid DCR application for the current user
+    And I have a valid Devportal access token for the current user
     When I add a "devportal" comment "This is root comment 1" with category "general" to API "dtApiId<suffix>" as "dtRoot1<suffix>"
     Then The response status code should be 201
     And The value of response field "entryPoint" should be "DEVPORTAL"
@@ -71,13 +74,14 @@ Feature: Setup comment threads for the plane-parity suite
     Then The response status code should be 201
 
     # --- The moderation API: published, deliberately comment-free.
+    And I act as "<actor>"
     When I have created an api from "artifacts/payloads/create_apim_test_api.json" as "mtApiId<suffix>" and deployed it
     And I publish the "apis" resource with id "mtApiId<suffix>"
     Then The lifecycle status of API "mtApiId<suffix>" should be "Published"
 
     Examples:
-      | actor             | suffix       |
-      | superTenantAdmin             |              |
-      | admin@tenant1.com | @tenant1.com |
-      | SECONDARY.COM/publisherUser1 | SecondaryStore |
-      | SECONDARY.COM/publisherUser1@tenant1.com | SecondaryStoreTenant |
+      | actor                                      | devportalActor                              | suffix              |
+      | superTenantAdmin                          | superTenantAdmin                            |                     |
+      | admin@tenant1.com                         | admin@tenant1.com                           | @tenant1.com        |
+      | SECONDARY.COM/publisherUser1               | SECONDARY.COM/subscriberUser1                | SecondaryStore      |
+      | SECONDARY.COM/publisherUser1@tenant1.com   | SECONDARY.COM/subscriberUser1@tenant1.com    | SecondaryStoreTenant |

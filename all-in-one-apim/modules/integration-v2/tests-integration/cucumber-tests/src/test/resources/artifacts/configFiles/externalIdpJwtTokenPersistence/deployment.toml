@@ -1,4 +1,5 @@
-# Isolated overlay for re-running ExternalIdpJwtRunner with OAuth token persistence enabled.
+# Isolated overlay for re-running ExternalIdpJwtRunner with OAuth token persistence enabled, used by the
+# distributed suite. testng-v2.xml carries the same keys in the federatedBackendJwtTokenPersistence overlay.
 # Keep the external-IdP backend-JWT settings identical to externalIdpJwt/deployment.toml, then add the
 # persistence setting exercised by the legacy ExternalIDPJWTTestSuite persistence configuration.
 

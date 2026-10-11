@@ -59,12 +59,12 @@ public class WorkflowRedirectSteps {
         Assert.assertNotNull(response, "No subscription workflow response is available");
         Assert.assertNotNull(response.getData(), "Subscription workflow returned no response body");
         JSONObject body = new JSONObject(response.getData());
-        // The current DevPortal REST API returns the WorkflowResponse DTO directly. The legacy Store UI wrapped
-        // the same DTO inside status.workflowResponse, but this scenario exercises the current API contract.
-        String jsonPayload = body.optString("jsonPayload", null);
-        Assert.assertNotNull(jsonPayload,
-                "Subscription workflow response has no jsonPayload: " + response.getData());
-        JSONObject workflowPayload = new JSONObject(jsonPayload);
+        // The DevPortal REST API returns the custom executor's HttpWorkflowResponse JSON payload as the subscription
+        // DTO's redirectionParams string (SubscriptionsApiServiceImpl#subscriptionsPost).
+        String redirectionParams = body.optString("redirectionParams", null);
+        Assert.assertNotNull(redirectionParams,
+                "Subscription workflow response has no redirectionParams: " + response.getData());
+        JSONObject workflowPayload = new JSONObject(redirectionParams);
         Assert.assertEquals(workflowPayload.optString("redirectUrl"), expectedRedirectUrl,
                 "Custom subscription executor returned an unexpected redirect URL");
     }

@@ -1,4 +1,5 @@
-# Dedicated gateway-global CORS-disabled overlay for AllowedScopesTestWithCorsDisabled parity.
+# Dedicated gateway-global CORS-disabled overlay for AllowedScopesTestWithCorsDisabled parity, used by the
+# distributed suite. testng-v2.xml carries the same keys in the is7txSecurityAudit overlay (SecurityAuditCorsDisabledAndSecretRotation block).
 # Kept out of the shared mtlsWsCors block so its positive REST and WebSocket CORS assertions remain unchanged.
 [oauth]
 allowed_scopes = ["^device_.*", "openid", "scope1", "scope2"]

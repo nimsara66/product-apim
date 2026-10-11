@@ -108,7 +108,8 @@ Feature: Gateway Basic-Auth Application Security
   # paths through the authenticator (credential mismatch vs. principal lookup miss), so they are separate
   # scenarios asserting their own status rather than one widened check. The username is tenant-qualified on
   # purpose: an unqualified made-up name resolves against the super tenant and would answer 403 on a tenant API,
-  # which would be a different failure mode entirely.
+  # which would be a different failure mode entirely. It is built in the block's physical username form, because in
+  # an email-username block a non-email name before @<tenant> is itself parsed as a super-tenant email username.
   @cap:gateway @feat:security-enforcement @rule:basic-auth-principals @type:negative @dep:publisher @legacy:APISecurityTestCase
   Scenario Outline: A basic_auth API rejects Basic credentials for a non-existent user (<tenant>)
     Given The system is ready
@@ -139,7 +140,8 @@ Feature: Gateway Basic-Auth Application Security
 
     # A username that was never provisioned, qualified to this tenant -> 401.
     When I generate a unique alphanumeric value and store it as "bnUsr"
-    And I invoke the API at gateway context "{{bnContext}}/1.0.0/customers/123/" with method "GET" using basic auth username "{{bnUsr}}@<tenant>" password "anyPassword123" until response status code becomes 401 within 60 seconds
+    And I store the physical username of unprovisioned user "{{bnUsr}}" as "bnPhysicalUsr"
+    And I invoke the API at gateway context "{{bnContext}}/1.0.0/customers/123/" with method "GET" using basic auth username "{{bnPhysicalUsr}}@<tenant>" password "anyPassword123" until response status code becomes 401 within 60 seconds
     Then The response status code should be 401
 
     Examples:

@@ -698,7 +698,7 @@ public final class ResourceCleanup {
      * (the endpoint self-registers with the caller's own Basic credentials), so an owner who cannot delete their own
      * client is the NORMAL case, not an edge one. Sweeping as the owner therefore leaked every client created by a
      * least-privilege actor: observed as 8 {@code may leak} WARNs from the two OAUTH endpoint-security outlines in
-     * {@code gateway/security_enforcement.feature}, whose Examples include {@code publisherUser} and
+     * {@code gateway/endpoint_security.feature}, whose Examples include {@code publisherUser} and
      * {@code publisherUser@tenant1.com} creator rows (2 outlines x 2 non-admin rows x 2 clients).
      *
      * <p>The tenant admin is the right principal rather than a widening of the rule: the client lives in the owner's

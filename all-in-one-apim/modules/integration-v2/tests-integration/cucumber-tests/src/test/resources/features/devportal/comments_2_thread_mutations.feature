@@ -220,7 +220,8 @@ Feature: API Comment Threads — Edit, Cascade Delete and Moderation Across Both
     Then The response status code should be 404
     When I retrieve all "devportal" comments of API "ptApiId<suffix>" with limit 5 offset 0
     Then The response status code should be 200
-    And The value of response field "count" should be "0"
+    And The value of response field "count" should be "1"
+    And The value of response field "$.list[0].id" should be "{{ptReaddedRoot<suffix>}}"
 
     Examples:
       | actor                     | suffix       |

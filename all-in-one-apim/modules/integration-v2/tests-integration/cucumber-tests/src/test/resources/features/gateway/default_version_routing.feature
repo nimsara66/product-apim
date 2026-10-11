@@ -7,7 +7,7 @@ Feature: Gateway Default Version Routing
   once no version is default. The two versions are pointed at distinct backends ("File 1" from name-checkOne,
   "File 2" from name-checkTwo) so the version that served the request is observable in the response body.
   Run in BOTH the super tenant and tenant1.com to prove default-version routing is tenant-agnostic (the tenant
-  API is addressed by its full /t/<tenant> context). Runs in the concurrent IntegrationV2-Gateway block
+  API is addressed by its full /t/<tenant> context). Runs in a concurrent IntegrationV2-Gateway-* block
   (backend started). Teardown via the per-scenario cleanup hook.
 
   @cap:gateway @feat:rest-invocation @type:regression @dep:publisher @legacy:DefaultVersionAPIServerRestartTestCase @legacy:DefaultVersionAPITestCase
@@ -15,7 +15,7 @@ Feature: Gateway Default Version Routing
     Given The system is ready
     And I have valid access tokens as "<actor>"
 
-    # v1.0.0 → "File 1" backend, created as the default version, then published.
+    # v1.0.0 → "File 1" backend, created without a default version, then published.
     And I have created an api from "artifacts/payloads/create_default_version_api.json" as "dvV1Id" and deployed it
     And the "apis" resource "dvV1Id" should be live on the gateway, redeploying if propagation is lost
     When I publish the "apis" resource with id "dvV1Id"
@@ -23,9 +23,39 @@ Feature: Gateway Default Version Routing
     When I retrieve the "apis" resource with id "dvV1Id"
     And I extract response field "context" and store it as "dvContext"
 
-    # An application subscribed to v1, with an access token.
+    # An application subscribed to v1, with an access token for both the 404 and successful route checks.
     When I have set up application with keys, subscribed to API "dvV1Id", and obtained access token for "dvSubV1"
     Then The response status code should be 200
+
+    # Legacy first proves that a published API without a default version has no versionless route.
+    When I retrieve the devportal API "dvV1Id"
+    Then The response status code should be 200
+    And The response array field "endpointURLs" should have exactly 1 entries
+    And The response field "endpointURLs[0].defaultVersionURLs.http" should be null
+    And The response field "endpointURLs[0].defaultVersionURLs.https" should be null
+    When I invoke the API at gateway context "{{dvContext}}/name" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 404 within 60 seconds
+    Then The response status code should be 404
+
+    # Mark v1 as the default and deploy that state before checking versionless routing.
+    When I retrieve the "apis" resource with id "dvV1Id"
+    And I put the response payload in context as "dvV1Payload"
+    When I update the "apis" resource "dvV1Id" and "dvV1Payload" with configuration type "isDefaultVersion" and value:
+    """
+    true
+    """
+    Then The response status code should be 200
+    When I deploy the API with id "dvV1Id"
+    Then The response status code should be 201
+    When I wait until "apis" "dvV1Id" revision is deployed in the gateway
+    And the "apis" resource "dvV1Id" should be live on the gateway, redeploying if propagation is lost
+
+    When I retrieve the devportal API "dvV1Id"
+    Then The response status code should be 200
+    And The response array field "endpointURLs" should have exactly 1 entries
+    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280{{dvContext}}/1.0.0"
+    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243{{dvContext}}/1.0.0"
+    And The value of response field "endpointURLs[0].defaultVersionURLs.http" should be "http://localhost:8280{{dvContext}}"
+    And The value of response field "endpointURLs[0].defaultVersionURLs.https" should be "https://localhost:8243{{dvContext}}"
 
     # G1: the versionless context (no /1.0.0 segment) routes to the default version → the File 1 backend.
     When I invoke the API at gateway context "{{dvContext}}/name" with method "GET" using access token "generatedAccessToken" and payload "" until response body contains "File 1" within 60 seconds
@@ -70,17 +100,17 @@ Feature: Gateway Default Version Routing
     When I retrieve the devportal API "dvV1Id"
     Then The response status code should be 200
     And The response array field "endpointURLs" should have exactly 1 entries
-    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280<tenantPrefix>/{{dvContext}}/1.0.0"
-    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243<tenantPrefix>/{{dvContext}}/1.0.0"
+    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280{{dvContext}}/1.0.0"
+    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243{{dvContext}}/1.0.0"
     And The response field "endpointURLs[0].defaultVersionURLs.http" should be null
     And The response field "endpointURLs[0].defaultVersionURLs.https" should be null
     When I retrieve the devportal API "dvV2Id"
     Then The response status code should be 200
     And The response array field "endpointURLs" should have exactly 1 entries
-    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280<tenantPrefix>/{{dvContext}}/2.0.0"
-    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243<tenantPrefix>/{{dvContext}}/2.0.0"
-    And The value of response field "endpointURLs[0].defaultVersionURLs.http" should be "http://localhost:8280<tenantPrefix>/{{dvContext}}"
-    And The value of response field "endpointURLs[0].defaultVersionURLs.https" should be "https://localhost:8243<tenantPrefix>/{{dvContext}}"
+    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280{{dvContext}}/2.0.0"
+    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243{{dvContext}}/2.0.0"
+    And The value of response field "endpointURLs[0].defaultVersionURLs.http" should be "http://localhost:8280{{dvContext}}"
+    And The value of response field "endpointURLs[0].defaultVersionURLs.https" should be "https://localhost:8243{{dvContext}}"
 
     # G2: the SAME versionless context now routes to the new default (v2) → the File 2 backend.
     When I invoke the API at gateway context "{{dvContext}}/name" with method "GET" using access token "generatedAccessToken" and payload "" until response body contains "File 2" within 60 seconds
@@ -104,15 +134,15 @@ Feature: Gateway Default Version Routing
     When I retrieve the devportal API "dvV1Id"
     Then The response status code should be 200
     And The response array field "endpointURLs" should have exactly 1 entries
-    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280<tenantPrefix>/{{dvContext}}/1.0.0"
-    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243<tenantPrefix>/{{dvContext}}/1.0.0"
+    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280{{dvContext}}/1.0.0"
+    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243{{dvContext}}/1.0.0"
     And The response field "endpointURLs[0].defaultVersionURLs.http" should be null
     And The response field "endpointURLs[0].defaultVersionURLs.https" should be null
     When I retrieve the devportal API "dvV2Id"
     Then The response status code should be 200
     And The response array field "endpointURLs" should have exactly 1 entries
-    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280<tenantPrefix>/{{dvContext}}/2.0.0"
-    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243<tenantPrefix>/{{dvContext}}/2.0.0"
+    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280{{dvContext}}/2.0.0"
+    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243{{dvContext}}/2.0.0"
     And The response field "endpointURLs[0].defaultVersionURLs.http" should be null
     And The response field "endpointURLs[0].defaultVersionURLs.https" should be null
 
@@ -121,9 +151,9 @@ Feature: Gateway Default Version Routing
     Then The response status code should be 404
 
     Examples:
-      | actor             | tenantPrefix   |
-      | admin             |                |
-      | admin@tenant1.com | /t/tenant1.com |
+      | actor             |
+      | admin             |
+      | admin@tenant1.com |
 
   # Context==version collision: an API whose context TAIL equals its version (context ".../v1", version "v1") is
   # set as the default version. A versionless invoke of that context (which is textually indistinguishable from a
@@ -166,9 +196,19 @@ Feature: Gateway Default Version Routing
     Given The system is ready
     And I have valid access tokens as "<actor>"
 
-    # v1.0.0 → "File 1" backend, created as the default version, deployed, then published.
+    # v1.0.0 → "File 1" backend, initially created without a default, then explicitly marked default, deployed, and published.
     And I have created an api from "artifacts/payloads/create_default_version_api.json" as "pdV1Id" and deployed it
     And the "apis" resource "pdV1Id" should be live on the gateway, redeploying if propagation is lost
+    When I retrieve the "apis" resource with id "pdV1Id"
+    And I put the response payload in context as "pdV1InitialPayload"
+    When I update the "apis" resource "pdV1Id" and "pdV1InitialPayload" with configuration type "isDefaultVersion" and value:
+    """
+    true
+    """
+    Then The response status code should be 200
+    When I deploy the API with id "pdV1Id"
+    Then The response status code should be 201
+    When I wait until "apis" "pdV1Id" revision is deployed in the gateway
     When I publish the "apis" resource with id "pdV1Id"
     Then The lifecycle status of API "pdV1Id" should be "Published"
     When I retrieve the "apis" resource with id "pdV1Id"
@@ -220,17 +260,17 @@ Feature: Gateway Default Version Routing
     When I retrieve the devportal API "pdV1Id"
     Then The response status code should be 200
     And The response array field "endpointURLs" should have exactly 1 entries
-    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280<tenantPrefix>/{{pdContext}}/1.0.0"
-    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243<tenantPrefix>/{{pdContext}}/1.0.0"
+    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280{{pdContext}}/1.0.0"
+    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243{{pdContext}}/1.0.0"
     And The response field "endpointURLs[0].defaultVersionURLs.http" should be null
     And The response field "endpointURLs[0].defaultVersionURLs.https" should be null
     When I retrieve the devportal API "pdV2Id"
     Then The response status code should be 200
     And The response array field "endpointURLs" should have exactly 1 entries
-    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280<tenantPrefix>/{{pdContext}}/2.0.0"
-    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243<tenantPrefix>/{{pdContext}}/2.0.0"
-    And The value of response field "endpointURLs[0].defaultVersionURLs.http" should be "http://localhost:8280<tenantPrefix>/{{pdContext}}"
-    And The value of response field "endpointURLs[0].defaultVersionURLs.https" should be "https://localhost:8243<tenantPrefix>/{{pdContext}}"
+    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280{{pdContext}}/2.0.0"
+    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243{{pdContext}}/2.0.0"
+    And The value of response field "endpointURLs[0].defaultVersionURLs.http" should be "http://localhost:8280{{pdContext}}"
+    And The value of response field "endpointURLs[0].defaultVersionURLs.https" should be "https://localhost:8243{{pdContext}}"
 
     # Post-deploy: the SAME versionless context now routes to the new default (v2) → the File 2 backend.
     When I invoke the API at gateway context "{{pdContext}}/name" with method "GET" using access token "generatedAccessToken" and payload "" until response body contains "File 2" within 60 seconds
@@ -254,15 +294,15 @@ Feature: Gateway Default Version Routing
     When I retrieve the devportal API "pdV1Id"
     Then The response status code should be 200
     And The response array field "endpointURLs" should have exactly 1 entries
-    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280<tenantPrefix>/{{pdContext}}/1.0.0"
-    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243<tenantPrefix>/{{pdContext}}/1.0.0"
-    And The value of response field "endpointURLs[0].defaultVersionURLs.http" should be "http://localhost:8280<tenantPrefix>/{{pdContext}}"
-    And The value of response field "endpointURLs[0].defaultVersionURLs.https" should be "https://localhost:8243<tenantPrefix>/{{pdContext}}"
+    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280{{pdContext}}/1.0.0"
+    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243{{pdContext}}/1.0.0"
+    And The value of response field "endpointURLs[0].defaultVersionURLs.http" should be "http://localhost:8280{{pdContext}}"
+    And The value of response field "endpointURLs[0].defaultVersionURLs.https" should be "https://localhost:8243{{pdContext}}"
     When I retrieve the devportal API "pdV2Id"
     Then The response status code should be 200
     And The response array field "endpointURLs" should have exactly 1 entries
-    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280<tenantPrefix>/{{pdContext}}/2.0.0"
-    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243<tenantPrefix>/{{pdContext}}/2.0.0"
+    And The value of response field "endpointURLs[0].URLs.http" should be "http://localhost:8280{{pdContext}}/2.0.0"
+    And The value of response field "endpointURLs[0].URLs.https" should be "https://localhost:8243{{pdContext}}/2.0.0"
     And The response field "endpointURLs[0].defaultVersionURLs.http" should be null
     And The response field "endpointURLs[0].defaultVersionURLs.https" should be null
 
@@ -272,6 +312,6 @@ Feature: Gateway Default Version Routing
     And The response should contain "Hello WSO2 from File 1"
 
     Examples:
-      | actor             | tenantPrefix   |
-      | admin             |                |
-      | admin@tenant1.com | /t/tenant1.com |
+      | actor             |
+      | admin             |
+      | admin@tenant1.com |

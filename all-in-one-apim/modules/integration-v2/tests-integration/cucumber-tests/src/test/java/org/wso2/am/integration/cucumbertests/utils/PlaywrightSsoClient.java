@@ -35,9 +35,11 @@ import com.microsoft.playwright.options.WaitUntilState;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Drives the APIM console single-sign-on journey through APIM's resident IS to an external federated Identity
@@ -136,12 +138,20 @@ public final class PlaywrightSsoClient implements AutoCloseable {
             // browser at runtime, so create() never blocks on a slow Firefox/WebKit fetch from the CDN.
             createdPlaywright = Playwright.create(new Playwright.CreateOptions()
                     .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
-            createdBrowser = createdPlaywright.chromium().launch(new BrowserType.LaunchOptions()
+            BrowserType.LaunchOptions launchOptions = new BrowserType.LaunchOptions()
                     .setHeadless(true)
                     .setProxy(new Proxy("http://127.0.0.1:" + createdProxy.getPort()))
                     // Chromium bypasses the proxy for loopback by default; force localhost through it so the
                     // servers' localhost:9443 URLs are tunnelled to the mapped ports.
-                    .setArgs(List.of("--proxy-bypass-list=<-loopback>")));
+                    .setArgs(List.of("--proxy-bypass-list=<-loopback>"));
+            Optional<Path> cgroup = BrowserCgroup.active();
+            if (cgroup.isPresent()) {
+                BrowserCgroup.applyTo(launchOptions, createdPlaywright.chromium(), cgroup.get());
+            }
+            createdBrowser = createdPlaywright.chromium().launch(launchOptions);
+            log.info(cgroup.map(c -> "Browser launched capped: " + BrowserCgroup.describe(c))
+                    .orElse("Browser launched uncapped: no browser cgroup on this host (os.name="
+                            + System.getProperty("os.name") + ")"));
             createdContext = createdBrowser.newContext(new Browser.NewContextOptions().setIgnoreHTTPSErrors(true));
             createdPage = createdContext.newPage();
         } catch (RuntimeException | Error startupFailure) {
@@ -460,41 +470,6 @@ public final class PlaywrightSsoClient implements AutoCloseable {
         // The submit kicks off the federated return, JIT provisioning and the console callback exchange;
         // assertLandedInConsole polls the cookie store for the resulting session cookie.
         assertNot17744();
-    }
-
-    /**
-     * Drives an OAuth authorization-code request through APIM's federated OIDC authenticator and the real external
-     * Identity Server, returning the final client redirect that carries the authorization code.
-     */
-    public String authorizeOAuthClientThroughExternalIs(String authorizeUrl, String callbackUrl, String username,
-            String password) {
-        try {
-            page.navigate(authorizeUrl, new Page.NavigateOptions()
-                    .setWaitUntil(WaitUntilState.COMMIT));
-        } catch (RuntimeException navigationError) {
-            // APIM may complete the final callback redirect to a non-page OAuth callback. The URL is still captured
-            // by the browser; defer judgment to the explicit code-bearing URL check below.
-            log.debug("OAuth authorize navigation ended during redirect: " + navigationError.getMessage());
-        }
-        try {
-            page.waitForSelector("input[type=password]", new Page.WaitForSelectorOptions().setTimeout(30000));
-        } catch (com.microsoft.playwright.TimeoutError e) {
-            throw new AssertionError("The federated OAuth flow did not reach the external Identity Server login. "
-                    + pageDiagnostic(), e);
-        }
-        fillFirst(username, "input[name=username]", "#username", "input#usernameUserInput", "input[type=text]");
-        fillFirst(password, "input[name=password]", "#password", "input[type=password]");
-        clickFirst("button[type=submit]", "input[type=submit]", "#loginForm button",
-                "button:has-text(\"Sign In\")", "button:has-text(\"Continue\")");
-
-        try {
-            page.waitForURL(url -> url.startsWith(callbackUrl) && url.contains("code="),
-                    new Page.WaitForURLOptions().setTimeout(60000));
-        } catch (com.microsoft.playwright.TimeoutError e) {
-            throw new AssertionError("Federated login did not return an authorization code to '" + callbackUrl
-                    + "'. Final browser URL: " + page.url() + "; " + pageDiagnostic(), e);
-        }
-        return page.url();
     }
 
     /** Lenient wait for the current navigation to reach LOAD — never fails the step on a redirect-chain timeout. */

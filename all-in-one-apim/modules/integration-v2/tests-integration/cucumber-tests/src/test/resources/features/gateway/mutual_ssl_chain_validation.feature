@@ -14,9 +14,9 @@ Feature: Gateway Mutual-SSL Certificate Chain Validation
     cert_chain_client.jks            chain length 3 — leaf + intermediate + root presented on the handshake
     cert_chain_client_head_only.jks  chain length 1 — the SAME leaf exported ALONE, no chain
 
-  This block therefore exists solely to carry `[apimgt.mutual_ssl] enable_certificate_chain_validation = true`,
-  which selects a different authenticator code path and so cannot share a container with the default-mode
-  mutual-SSL feature without destroying that feature's meaning.
+  The blocks running this feature carry `[apimgt.mutual_ssl] enable_certificate_chain_validation = true`, which
+  selects a different authenticator code path and so cannot share a container with the default-mode mutual-SSL
+  feature without destroying that feature's meaning.
 
   About the legacy source: the class is COMMENTED OUT of the legacy testng.xml (line 411), so none of this was
   ever actually verified upstream.

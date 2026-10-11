@@ -232,6 +232,19 @@ public class OrganizationSteps {
                 Utils.resolveContextPlaceholders(roles));
     }
 
+    /**
+     * Stores the username a user that was never provisioned would have in this block's user store: the
+     * {@link TenantUserProvisioner#physicalUserName} form of the base name, which is email-form only in an
+     * email-username block. A negative that needs a missing principal, or an arbitrary provider, then has the shape
+     * the server parses for this mode; the scenario still appends its own {@code @tenant} qualifier.
+     */
+    @When("I store the physical username of unprovisioned user {string} as {string}")
+    public void iStorePhysicalUsernameOfUnprovisionedUser(String baseName, String contextKey) {
+
+        TestContext.set(contextKey,
+                TenantUserProvisioner.physicalUserName(Utils.resolveContextPlaceholders(baseName)));
+    }
+
     /** Provisions an actor whose lookup key differs from the username stored in the user store. */
     @When("I provision user {string} as actor {string} with roles {string} in tenant {string}")
     public void iProvisionUserAsActor(String username, String actorKey, String roles, String tenantDomain)

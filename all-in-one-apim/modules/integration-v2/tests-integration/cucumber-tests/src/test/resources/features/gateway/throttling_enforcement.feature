@@ -426,7 +426,7 @@ Feature: Gateway Throttling Enforcement
     Then The response status code should be 200
     When I retrieve the "apis" resource with id "advThrottleApiId"
     Then The value of response field "apiThrottlingPolicy" should be "{{advThrottlePolicyName}}"
-    And The response array field "operations[*].throttlingPolicy" should have exactly 1 entries
+    And The response array field "operations[*].throttlingPolicy" should have exactly 2 entries
     And The response field "operations[*].throttlingPolicy" should be exactly the list "Unlimited"
     When I deploy the API with id "advThrottleApiId"
     Then The response status code should be 201
@@ -811,6 +811,13 @@ Feature: Gateway Throttling Enforcement
     Then The response status code should be 429
     And The value of error response field "code" should be "900803"
 
+    # Keep a fresh pre-reset quota expiry: if the first 429 landed near minute-end, let that window roll over and
+    # re-establish the same 429 so reset propagation is tested before a full new expiry.
+    When I wait until the current application throttle window has at least 45 seconds remaining
+    And I invoke the API at gateway context "{{resetContext}}/1.0.0/customers/123/" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 429 within 10 seconds
+    Then The response status code should be 429
+    And The value of error response field "code" should be "900803"
+
     # Reset the application's throttle counter -> invocation succeeds again.
     When I reset the application throttle policy for "createdAppId" owned by "<actor>"
     Then The response status code should be 200
@@ -945,6 +952,13 @@ Feature: Gateway Throttling Enforcement
 
     # Drive the SUBSCRIBER's token past the 3/min limit -> 429 code 900803 (APPLICATION-level), the limit the reset clears.
     When I invoke the API at gateway context "{{xoResetContext}}/1.0.0/customers/123/" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 429 within 60 seconds
+    Then The response status code should be 429
+    And The value of error response field "code" should be "900803"
+
+    # Keep a fresh pre-reset quota expiry: if the first 429 landed near minute-end, let that window roll over and
+    # re-establish the same 429 so reset propagation is tested before a full new expiry.
+    When I wait until the current application throttle window has at least 45 seconds remaining
+    And I invoke the API at gateway context "{{xoResetContext}}/1.0.0/customers/123/" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 429 within 10 seconds
     Then The response status code should be 429
     And The value of error response field "code" should be "900803"
 

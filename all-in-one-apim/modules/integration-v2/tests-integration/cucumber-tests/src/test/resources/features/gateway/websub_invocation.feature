@@ -632,9 +632,12 @@ Feature: Gateway WebSub API Invocation
 
     And I generate a unique alphanumeric value and store it as "websubSubscriberSecret"
     And I have a "silent" WebSub callback receiver stored as "websubReceiver"
-    # Routable control: a well-formed registration is accepted, then withdrawn
+    # Routable control: a well-formed registration is accepted and persisted, then withdrawn and removed. The hub
+    # answers 202 before it persists, so each leg is gated on the persisted count before the next request is sent.
     When I send a WebSub "subscribe" request as form data to gateway context "{{websubContext}}/1.0.0" with callback "{{websubReceiverCallback}}" topic "_default" secret "{{websubSubscriberSecret}}" lease seconds "50000000" using access token "generatedAccessToken" until response status code becomes 202 within 60 seconds
-    And I send a WebSub "unsubscribe" request as form data to gateway context "{{websubContext}}/1.0.0" with callback "{{websubReceiverCallback}}" topic "_default" secret "{{websubSubscriberSecret}}" lease seconds "50000000" using access token "generatedAccessToken" until response status code becomes 202 within 60 seconds
+    Then The internal webhooks subscription list should hold exactly 1 subscription for API "websubApiId" within 60 seconds
+    When I send a WebSub "unsubscribe" request as form data to gateway context "{{websubContext}}/1.0.0" with callback "{{websubReceiverCallback}}" topic "_default" secret "{{websubSubscriberSecret}}" lease seconds "50000000" using access token "generatedAccessToken" until response status code becomes 202 within 60 seconds
+    Then The internal webhooks subscription list should hold exactly 0 subscriptions for API "websubApiId" within 60 seconds
     # The same registration with one mandatory parameter blank is rejected
     When I send a WebSub "<hubMode>" request as form data to gateway context "{{websubContext}}/1.0.0" with callback "<callback>" topic "<topic>" secret "{{websubSubscriberSecret}}" lease seconds "50000000" using access token "generatedAccessToken" until response status code becomes 500 within 30 seconds
     Then The response should contain "One or more mandatory parameters were not found in web hook subscription request"

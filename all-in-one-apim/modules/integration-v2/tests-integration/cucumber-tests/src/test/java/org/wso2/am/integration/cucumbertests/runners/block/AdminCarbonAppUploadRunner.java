@@ -12,7 +12,10 @@ package org.wso2.am.integration.cucumbertests.runners.block;
 
 import io.cucumber.testng.CucumberOptions;
 
-/** Dedicated sequential block: both actor examples deploy the same isolated fixture CAR. */
+/**
+ * Runs last in a sequential block: both actor examples deploy the same fixture CAR, whose artifacts stay on the
+ * server, so no runner after it shares that server.
+ */
 @CucumberOptions(
         features = "src/test/resources/features/admin/carbon_app_upload.feature",
         glue = "org.wso2.am.integration.cucumbertests.stepdefinitions",

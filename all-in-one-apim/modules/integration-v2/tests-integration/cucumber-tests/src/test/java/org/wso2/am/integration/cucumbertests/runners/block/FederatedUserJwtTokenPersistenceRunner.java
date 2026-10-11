@@ -19,16 +19,11 @@ package org.wso2.am.integration.cucumbertests.runners.block;
 import io.cucumber.testng.CucumberOptions;
 
 /**
- * Re-runs the existing FederatedUserJWTTestCase coverage with OAuth token persistence enabled. The legacy tag
- * selects its password-grant profile-claim examples and external OIDC authorization-code examples from their
- * existing features, without pulling unrelated backend-JWT scenarios into this configuration block.
+ * Re-runs the FederatedUserJWTTestCase coverage (password-grant profile claims and external OIDC authorization
+ * code) with OAuth token persistence enabled.
  */
 @CucumberOptions(
-        features = {
-                "src/test/resources/features/key-manager/backend_jwt.feature",
-                "src/test/resources/features/key-manager/federated_backend_jwt.feature"
-        },
-        tags = "@legacy:FederatedUserJWTTestCase",
+        features = {"src/test/resources/features/key-manager/federated_backend_jwt.feature"},
         glue = {"org.wso2.am.integration.cucumbertests.stepdefinitions"},
         plugin = {"pretty", "html:target/cucumber-report/federated-user-jwt-token-persistence.html"}
 )

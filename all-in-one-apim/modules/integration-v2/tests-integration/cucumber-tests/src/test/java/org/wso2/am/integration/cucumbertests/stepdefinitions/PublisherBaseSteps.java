@@ -4922,7 +4922,7 @@ public class PublisherBaseSteps {
     @When("I create an API product {string} with context {string} and provider {string} from APIs {string} as {string}")
     public void iCreateApiProductWithExplicitProvider(String nameBase, String contextBase, String providerValue,
                                                       String apiIdKeysCsv, String productIdKey) throws IOException {
-        String provider = Utils.resolvePayloadPlaceholders(providerValue);
+        String provider = Utils.resolveContextPlaceholders(Utils.resolvePayloadPlaceholders(providerValue));
         createApiProduct(nameBase, contextBase, provider, apiIdKeysCsv, productIdKey);
         TestContext.set(productIdKey + PRODUCT_REQUESTED_PROVIDER_SUFFIX, provider);
     }

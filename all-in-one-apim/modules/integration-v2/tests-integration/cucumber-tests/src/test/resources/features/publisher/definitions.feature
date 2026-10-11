@@ -844,7 +844,7 @@ Feature: Publisher API Definition Import
   # resource-owner PASSWORD. That last one is assertable HERE — and only here — because these import properties
   # carry distinct literal credentials that collide with nothing else in the payload, whereas the gateway
   # password-grant scenario uses the acting actor's own carbon password (see the OAUTH password-grant scenario in
-  # gateway/security_enforcement.feature). Together with that scenario this pins the PASSWORD-grant config on BOTH
+  # gateway/endpoint_security.feature). Together with that scenario this pins the PASSWORD-grant config on BOTH
   # the create path (here) and the update path (there).
   # Ports the PASSWORD-grant half of AddEndPointSecurityPerTypeTestCase#testAPIDefinitionImportWithEndpointSecurity.
   @cap:publisher @feat:definitions @rule:import-export @type:regression @legacy:AddEndPointSecurityPerTypeTestCase

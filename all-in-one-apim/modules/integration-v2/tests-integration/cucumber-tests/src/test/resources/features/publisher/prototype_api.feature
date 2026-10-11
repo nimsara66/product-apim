@@ -28,7 +28,7 @@ Feature: Prototype API runtime, mock and visibility
     Then The response status code should be 200
     When I retrieve the "apis" resource with id "protoApiId"
     Then The response status code should be 200
-    And The value of response field "endpointConfig.implementation_status" should be "prototyped"
+    And The value of response field "lifeCycleStatus" should be "PROTOTYPED"
     When I deploy the API with id "protoApiId"
     When I retrieve the "apis" resource with id "protoApiId"
     And I extract response field "context" and store it as "apiContext"
@@ -64,7 +64,7 @@ Feature: Prototype API runtime, mock and visibility
     Then The response status code should be 200
     When I retrieve the "apis" resource with id "protoApiId"
     Then The response status code should be 200
-    And The value of response field "endpointConfig.implementation_status" should be "prototyped"
+    And The value of response field "lifeCycleStatus" should be "PROTOTYPED"
     When I deploy the API with id "protoApiId"
     Then The response status code should be 201
     # Deploy-readiness gate BEFORE the demote, and it is load-bearing. The deploy and the demote each fire an
@@ -175,7 +175,7 @@ Feature: Prototype API runtime, mock and visibility
     Then The response status code should be 200
     When I retrieve the "apis" resource with id "protoApiId"
     Then The response status code should be 200
-    And The value of response field "endpointConfig.implementation_status" should be "prototyped"
+    And The value of response field "lifeCycleStatus" should be "PROTOTYPED"
     When I deploy the API with id "protoApiId"
 
     # Publisher listing: assert the same identity tuple as the Store-list probe below, against the scenario's

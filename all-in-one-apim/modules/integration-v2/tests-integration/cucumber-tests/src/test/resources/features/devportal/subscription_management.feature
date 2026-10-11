@@ -207,7 +207,7 @@ Feature: DevPortal Subscription Management
 
     # Admin provisions the API and subscription; only the force-change request switches to the least-privileged
     # publisher identity. This proves the endpoint works for a Publisher role without granting it admin setup rights.
-    Given I act as "<publisherActor>"
+    Given I have valid publisher access tokens as "<publisherActor>"
     When I change the subscription business plan of "subscriptionId" to "Gold"
     Then The response status code should be 200
     And I act as "<adminActor>"

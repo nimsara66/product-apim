@@ -65,6 +65,8 @@ public final class SsoProvisioner {
     private static final String NS_APP_OPS = "http://org.apache.axis2/xsd";
 
     private static final String SCIM_CONTENT_TYPE = "application/scim+json";
+    /** IS 7.x SCIM2 custom user-schema extension (charon-config custom-user-schema-uri). */
+    private static final String SCIM2_CUSTOM_USER_SCHEMA = "urn:scim:schemas:extension:custom:User";
 
     /**
      * APIM's INTERNAL browser-facing base — the hostname APIM emits in its own redirects and {@code redirect_uri}
@@ -218,55 +220,79 @@ public final class SsoProvisioner {
 
     /** Adds a custom OIDC claim mapping on the external IS that issues the federated token. */
     private static void registerIsOidcExternalClaim(String oidcClaim, String localClaim) throws IOException {
-        String base = isBrowserBase() + "api/server/v1/claim-dialects";
-        HttpResponse dialectsResponse = SimpleHTTPClient.getInstance().doGet(base, isAuthHeaders());
-        Assert.assertTrue(dialectsResponse != null && dialectsResponse.getResponseCode() == 200,
-                "IS claim dialect lookup failed: " + (dialectsResponse == null ? "null"
-                        : dialectsResponse.getResponseCode() + "/" + dialectsResponse.getData()));
-        JSONArray dialects = new JSONArray(dialectsResponse.getData());
-        String oidcDialectId = null;
-        for (int i = 0; i < dialects.length(); i++) {
-            JSONObject dialect = dialects.getJSONObject(i);
-            if ("http://wso2.org/oidc/claim".equals(dialect.optString("dialectURI"))) {
-                oidcDialectId = dialect.getString("id");
-                break;
-            }
-        }
-        Assert.assertNotNull(oidcDialectId, "IS has no http://wso2.org/oidc/claim dialect");
+        registerIsExternalClaim("http://wso2.org/oidc/claim", false, oidcClaim, localClaim);
+    }
 
-        String claimsUrl = base + "/" + oidcDialectId + "/claims";
+    /**
+     * Maps an external claim of the given IS claim dialect to a local claim, updating an existing mapping in place.
+     * With {@code createDialect}, a dialect the IS does not have yet is created first (the SCIM2 custom user
+     * schema dialect exists only once its first attribute is added).
+     */
+    private static void registerIsExternalClaim(String dialectUri, boolean createDialect, String externalClaim,
+                                                String localClaim) throws IOException {
+        String base = isBrowserBase() + "api/server/v1/claim-dialects";
+        String dialectId = isClaimDialectId(base, dialectUri);
+        if (dialectId == null && createDialect) {
+            HttpResponse dialectCreate = SimpleHTTPClient.getInstance().doPost(base, isAuthHeaders(),
+                    new JSONObject().put("dialectURI", dialectUri).toString(),
+                    Constants.CONTENT_TYPES.APPLICATION_JSON);
+            Assert.assertTrue(dialectCreate != null && (dialectCreate.getResponseCode() == 201
+                            || dialectCreate.getResponseCode() == 409),
+                    "IS claim dialect " + dialectUri + " creation failed: " + (dialectCreate == null ? "null"
+                            : dialectCreate.getResponseCode() + "/" + dialectCreate.getData()));
+            dialectId = isClaimDialectId(base, dialectUri);
+        }
+        Assert.assertNotNull(dialectId, "IS has no " + dialectUri + " dialect");
+
+        String claimsUrl = base + "/" + dialectId + "/claims";
         HttpResponse claimsResponse = SimpleHTTPClient.getInstance().doGet(claimsUrl, isAuthHeaders());
         Assert.assertTrue(claimsResponse != null && claimsResponse.getResponseCode() == 200,
-                "IS OIDC claim lookup failed: " + (claimsResponse == null ? "null"
+                "IS " + dialectUri + " claim lookup failed: " + (claimsResponse == null ? "null"
                         : claimsResponse.getResponseCode() + "/" + claimsResponse.getData()));
         JSONArray claims = new JSONArray(claimsResponse.getData());
         for (int i = 0; i < claims.length(); i++) {
             JSONObject claim = claims.getJSONObject(i);
-            if (oidcClaim.equals(claim.optString("claimURI"))) {
+            if (externalClaim.equals(claim.optString("claimURI"))) {
                 if (localClaim.equals(claim.optString("mappedLocalClaimURI"))) {
                     return;
                 }
-                JSONObject payload = new JSONObject().put("claimURI", oidcClaim)
+                JSONObject payload = new JSONObject().put("claimURI", externalClaim)
                         .put("mappedLocalClaimURI", localClaim);
                 HttpResponse updateResponse = SimpleHTTPClient.getInstance().doPut(
                         claimsUrl + "/" + claim.getString("id"), isAuthHeaders(), payload.toString(),
                         Constants.CONTENT_TYPES.APPLICATION_JSON);
                 Assert.assertTrue(updateResponse != null && updateResponse.getResponseCode() >= 200
                                 && updateResponse.getResponseCode() < 300,
-                        "IS OIDC external claim " + oidcClaim + " update failed: "
+                        "IS external claim " + externalClaim + " update failed: "
                                 + (updateResponse == null ? "null"
                                         : updateResponse.getResponseCode() + "/" + updateResponse.getData()));
                 return;
             }
         }
 
-        JSONObject payload = new JSONObject().put("claimURI", oidcClaim).put("mappedLocalClaimURI", localClaim);
+        JSONObject payload = new JSONObject().put("claimURI", externalClaim).put("mappedLocalClaimURI", localClaim);
         HttpResponse createResponse = SimpleHTTPClient.getInstance().doPost(claimsUrl, isAuthHeaders(),
                 payload.toString(), Constants.CONTENT_TYPES.APPLICATION_JSON);
         Assert.assertTrue(createResponse != null && createResponse.getResponseCode() == 201,
-                "IS OIDC external claim " + oidcClaim + " creation failed: "
+                "IS external claim " + externalClaim + " creation failed: "
                         + (createResponse == null ? "null"
                                 : createResponse.getResponseCode() + "/" + createResponse.getData()));
+    }
+
+    /** Returns the IS claim-management id of the dialect with the given URI, or null if the IS has none. */
+    private static String isClaimDialectId(String dialectsUrl, String dialectUri) throws IOException {
+        HttpResponse dialectsResponse = SimpleHTTPClient.getInstance().doGet(dialectsUrl, isAuthHeaders());
+        Assert.assertTrue(dialectsResponse != null && dialectsResponse.getResponseCode() == 200,
+                "IS claim dialect lookup failed: " + (dialectsResponse == null ? "null"
+                        : dialectsResponse.getResponseCode() + "/" + dialectsResponse.getData()));
+        JSONArray dialects = new JSONArray(dialectsResponse.getData());
+        for (int i = 0; i < dialects.length(); i++) {
+            JSONObject dialect = dialects.getJSONObject(i);
+            if (dialectUri.equals(dialect.optString("dialectURI"))) {
+                return dialect.getString("id");
+            }
+        }
+        return null;
     }
 
     /** Ensures a claim is released by a standard IS OIDC scope, preserving its existing mappings. */
@@ -317,6 +343,12 @@ public final class SsoProvisioner {
         JSONArray schemas = new JSONArray().put("urn:ietf:params:scim:schemas:core:2.0:User");
         if (profileClaims) {
             schemas.put("urn:ietf:params:scim:schemas:extension:enterprise:2.0:User");
+            // The OIDC phone_number claim reads the local telephone claim, which no shipped SCIM2 attribute maps to
+            // on IS 7.3 (phoneNumbers.work maps to the separate phoneNumbers.work claim). Map a custom user-schema
+            // attribute to it so the user carries the telephone the federated id_token releases.
+            registerIsExternalClaim(SCIM2_CUSTOM_USER_SCHEMA, true, SCIM2_CUSTOM_USER_SCHEMA + ":telephone",
+                    "http://wso2.org/claims/telephone");
+            schemas.put(SCIM2_CUSTOM_USER_SCHEMA);
         }
         JSONObject userPayload = new JSONObject()
                 .put("schemas", schemas)
@@ -327,11 +359,10 @@ public final class SsoProvisioner {
         if (profileClaims) {
             userPayload.put("phoneNumbers", new JSONArray()
                     .put(new JSONObject().put("primary", false).put("type", "mobile")
-                            .put("value", "94123456987"))
-                    .put(new JSONObject().put("primary", true).put("type", "work")
-                            .put("value", "424479772294778")));
+                            .put("value", "94123456987")));
             userPayload.put("urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
                     new JSONObject().put("organization", "FederatedOrg"));
+            userPayload.put(SCIM2_CUSTOM_USER_SCHEMA, new JSONObject().put("telephone", "424479772294778"));
         }
         HttpResponse userResp = SimpleHTTPClient.getInstance().doPost(base + "scim2/Users",
                 isAuthHeaders(), userPayload.toString(), SCIM_CONTENT_TYPE);

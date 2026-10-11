@@ -76,7 +76,7 @@ Feature: Gateway CORS
     And The response header "Access-Control-Allow-Headers" should contain "apikey"
     # The custom configured allow-header is echoed in the pre-flight allow-headers.
     And The response header "Access-Control-Allow-Headers" should contain "X-BrowserSessionID"
-    And The response header "Access-Control-Allow-Headers" should be exactly "authorization,Access-Control-Allow-Origin,Content-Type,apikey,X-BrowserSessionID"
+    And The response header "Access-Control-Allow-Headers" should be exactly "authorization,Access-Control-Allow-Origin,Content-Type,apikey,X-BrowserSessionID,Authorization,ApiKey"
 
     # Negative: a NORMAL (non pre-flight) request carrying an Origin gets a 200 but MUST NOT carry the
     # pre-flight-only Access-Control-Allow-Methods / -Allow-Headers response headers.

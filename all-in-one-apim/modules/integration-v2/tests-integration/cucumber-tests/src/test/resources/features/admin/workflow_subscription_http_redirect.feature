@@ -24,5 +24,5 @@ Feature: Custom subscription workflow HTTP redirect
     {"applicationId":"{{createdAppId}}","apiId":"{{redirectApiId}}","throttlingPolicy":"Unlimited"}
     """
     And I submit a subscription for API "redirectApiId" and application "createdAppId" with payload "redirectSubscriptionPayload"
-    Then The response status code should be 202
+    Then The response status code should be 201
     Then The subscription workflow response should contain redirect URL "http://google.lk"

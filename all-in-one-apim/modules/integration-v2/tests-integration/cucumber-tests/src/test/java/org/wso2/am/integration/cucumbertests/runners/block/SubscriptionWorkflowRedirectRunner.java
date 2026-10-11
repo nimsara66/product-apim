@@ -20,7 +20,13 @@ import io.cucumber.testng.CucumberOptions;
 import org.testng.annotations.AfterClass;
 import org.wso2.am.integration.cucumbertests.stepdefinitions.WorkflowAdminSteps;
 
-/** Isolated block for the custom subscription HTTP-redirect executor, whose JAR is installed at container boot. */
+/**
+ * Runner for the custom subscription HTTP-redirect executor, whose JAR is installed into components/lib at container
+ * boot. Its feature selects that executor by writing an alternate workflow-extensions.xml into the governance
+ * registry; {@link #restoreWorkflowExecutors()} undoes it once after the runner, even on failure. It shares the
+ * thread-count=1 IntegrationV2-ApprovalWorkflow block with the other workflow-executor runners, each of which
+ * flips and restores the same server-global configuration in its own AfterClass.
+ */
 @CucumberOptions(
         features = "src/test/resources/features/admin/workflow_subscription_http_redirect.feature",
         glue = {"org.wso2.am.integration.cucumbertests.stepdefinitions"},

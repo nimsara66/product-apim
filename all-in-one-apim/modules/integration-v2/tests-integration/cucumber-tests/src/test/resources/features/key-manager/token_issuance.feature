@@ -430,7 +430,7 @@ Feature: Key Manager Token Issuance
     Then The response status code should be 200
     # The SANDBOX-key token is the credential under test; pin the backend payload so the 200 is evidence the token
     # was honoured all the way to the upstream. (It does not identify WHICH endpoint served it — this API's
-    # production and sandbox endpoints are the same URL — that distinction is gateway/rest_invocation's
+    # production and sandbox endpoints are the same URL — that distinction is gateway/rest_endpoint_routing's
     # endpoint-routing scenario, which uses two path-echoing endpoints.)
     And I invoke the API at gateway context "{{apiContext}}/1.0.0/customers/123/" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 60 seconds
     Then The response status code should be 200
@@ -582,7 +582,7 @@ Feature: Key Manager Token Issuance
     Then The response status code should be 200
 
     # A SUBSCRIBER receives the consumer scopes and none of the publisher-plane ones.
-    When I request an OAuth access token using password grant as "<storePrefix>subscriberUser<suffix>" with scope "openid apim:api_view apim:api_create apim:api_publish apim:subscribe apim:app_update"
+    When I request an OAuth access token using password grant as "<subscriberActor>" with scope "openid apim:api_view apim:api_create apim:api_publish apim:subscribe apim:app_update"
     Then The response status code should be 200
     And The issued token scope list should include "openid,apim:subscribe,apim:app_update" and exclude "apim:api_view,apim:api_create,apim:api_publish"
 
@@ -592,16 +592,16 @@ Feature: Key Manager Token Issuance
     And The issued token scope list should include "openid,apim:api_view,apim:api_create" and exclude "apim:api_publish,apim:subscribe,apim:app_update"
 
     # A CREATOR+PUBLISHER receives both publisher-plane scopes, still no consumer scopes.
-    When I request an OAuth access token using password grant as "<storePrefix>publisherUser<suffix>" with scope "openid apim:api_view apim:api_create apim:api_publish apim:subscribe apim:app_update"
+    When I request an OAuth access token using password grant as "<publisherActor>" with scope "openid apim:api_view apim:api_create apim:api_publish apim:subscribe apim:app_update"
     Then The response status code should be 200
     And The issued token scope list should include "openid,apim:api_view,apim:api_create,apim:api_publish" and exclude "apim:subscribe,apim:app_update"
 
     # Publisher plane: a subscriber's token is unauthenticated for the API listing (401 — the management API's
     # answer for a token lacking the required scope, NOT 403); the creator+publisher's token is the control.
-    Given The system is ready and I have valid publisher access tokens as "<storePrefix>subscriberUser<suffix>"
+    Given The system is ready and I have valid publisher access tokens as "<subscriberActor>"
     When I retrieve all APIs created through the Publisher REST API
     Then The response status code should be 401
-    Given The system is ready and I have valid publisher access tokens as "<storePrefix>publisherUser<suffix>"
+    Given The system is ready and I have valid publisher access tokens as "<publisherActor>"
     When I retrieve all APIs created through the Publisher REST API
     Then The response status code should be 200
 
@@ -609,16 +609,16 @@ Feature: Key Manager Token Issuance
     Given The system is ready and I have valid devportal access token as "<storePrefix>roleScopeCreator<suffix>"
     When I retrieve all applications from the Developer Portal
     Then The response status code should be 401
-    Given The system is ready and I have valid devportal access token as "<storePrefix>subscriberUser<suffix>"
+    Given The system is ready and I have valid devportal access token as "<subscriberActor>"
     When I retrieve all applications from the Developer Portal
     Then The response status code should be 200
 
     Examples:
-      | tenant       | suffix       | storePrefix  | store           | adminActor        |
-      | carbon.super |              |              | primary         | superTenantAdmin  |
-      | carbon.super |              | SECONDARY.COM/ | SECONDARY.COM   | superTenantAdmin  |
-      | tenant1.com  | @tenant1.com |              | primary         | admin@tenant1.com |
-      | tenant1.com  | @tenant1.com | SECONDARY.COM/ | SECONDARY.COM   | admin@tenant1.com |
+      | tenant       | suffix       | storePrefix  | store           | adminActor        | subscriberActor                           | publisherActor                           |
+      | carbon.super |              |              | primary         | superTenantAdmin  | subscriberUser                            | publisherUser                            |
+      | carbon.super |              | SECONDARY.COM/ | SECONDARY.COM   | superTenantAdmin  | SECONDARY.COM/subscriberUser1             | SECONDARY.COM/publisherUser1             |
+      | tenant1.com  | @tenant1.com |              | primary         | admin@tenant1.com | subscriberUser@tenant1.com                | publisherUser@tenant1.com                |
+      | tenant1.com  | @tenant1.com | SECONDARY.COM/ | SECONDARY.COM   | admin@tenant1.com | SECONDARY.COM/subscriberUser1@tenant1.com | SECONDARY.COM/publisherUser1@tenant1.com |
 
   @cap:key-manager @feat:token-issuance @rule:authcode @type:regression @legacy:GrantTypeTokenGenerateTestCase
   Scenario Outline: Generate an access token via authorization code grant as <actor>
@@ -839,11 +839,14 @@ Feature: Key Manager Token Issuance
       | admin@tenant1.com |
 
   @cap:key-manager @feat:token-issuance @rule:scope-in-token @type:regression @legacy:TokenEncryptionScopeTestCase
-  Scenario Outline: A requested shared scope is granted in the issued token as <actor>
+  Scenario Outline: A requested <scopeType> scope is granted in the issued token as <actor>
     Given The system is ready and I have valid publisher access tokens as "<providerActor>"
     When I create a new shared scope as "encTokenScope"
     Then The response status code should be 201
     And I extract response field "name" and store it as "encTokenScopeName"
+    When I retrieve the shared scope with id "scopeID"
+    Then The response status code should be 200
+    And The response field "bindings" should be exactly the list "admin"
     When I put JSON payload from file "artifacts/payloads/create_apim_test_api.json" in context as "encApiCreate"
     And I create an "apis" resource with payload "encApiCreate" as "encApiId"
     Then The response status code should be 201
@@ -851,16 +854,20 @@ Feature: Key Manager Token Issuance
     And I put the response payload in context as "encApiPayload"
     When I update the "apis" resource "encApiId" and "encApiPayload" with configuration type "scopes" and value:
       """
-      [{"shared":true,"scope":{"name":"{{encTokenScopeName}}","displayName":"{{encTokenScopeName}}","description":"scope in token","bindings":["admin","Internal/subscriber"]}}]
+      [{"shared":true,"scope":{"name":"{{encTokenScopeName}}","displayName":"{{encTokenScopeName}}","description":"admin-bound shared scope","bindings":["admin"]}},{"shared":false,"scope":{"name":"{{encTokenScopeName}}_local","displayName":"{{encTokenScopeName}}_local","description":"subscriber-bound API-local scope","bindings":["Internal/subscriber"]}}]
       """
     Then The response status code should be 200
     When I retrieve the "apis" resource with id "encApiId"
     And I put the response payload in context as "encApiPayload"
     When I update the "apis" resource "encApiId" and "encApiPayload" with configuration type "operations" and value:
       """
-      [{"target":"/customers/{id}","verb":"GET","authType":"Application & Application User","throttlingPolicy":"Unlimited","scopes":["{{encTokenScopeName}}"],"operationPolicies":{"request":[],"response":[],"fault":[]}}]
+      [{"target":"/customers/{id}","verb":"GET","authType":"Application & Application User","throttlingPolicy":"Unlimited","scopes":["{{encTokenScopeName}}","{{encTokenScopeName}}_local"],"operationPolicies":{"request":[],"response":[],"fault":[]}}]
       """
     Then The response status code should be 200
+    When I retrieve the "apis" resource with id "encApiId"
+    Then The response array field "scopes" should have exactly 2 entries
+    And The response field "scopes[?(@.scope.name=='{{encTokenScopeName}}_local')].scope.bindings[*]" should be exactly the list "Internal/subscriber"
+    And The response field "operations[0].scopes[*]" should be exactly the list "{{encTokenScopeName}},{{encTokenScopeName}}_local"
     When I put the following JSON payload in context as "encRevPayload"
     """
     {"description":"scope revision"}
@@ -890,17 +897,17 @@ Feature: Key Manager Token Issuance
     """
     And I subscribe to API "encApiId" using application "createdAppId" with payload "encSubPayload" as "encSubId"
     Then The response status code should be 201
-    When I request an OAuth access token for the current user using password grant with scope "{{encTokenScopeName}}"
+    When I request an OAuth access token for the current user using password grant with scope "<requestedScope>"
     Then The response status code should be 200
     And I extract response field "scope" and store it as "encTokenGrantedScope"
-    And The stored value "encTokenGrantedScope" should be "{{encTokenScopeName}}"
+    And The stored value "encTokenGrantedScope" should be "<requestedScope>"
 
     Examples:
-      | providerActor     | actor                    |
-      | superTenantAdmin  | superTenantAdmin         |
-      | admin@tenant1.com | admin@tenant1.com        |
-      | superTenantAdmin  | subscriberUser           |
-      | admin@tenant1.com | subscriberUser@tenant1.com |
+      | providerActor     | actor                    | scopeType | requestedScope                 |
+      | superTenantAdmin  | superTenantAdmin         | shared    | {{encTokenScopeName}}           |
+      | admin@tenant1.com | admin@tenant1.com        | shared    | {{encTokenScopeName}}           |
+      | superTenantAdmin  | subscriberUser           | local     | {{encTokenScopeName}}_local     |
+      | admin@tenant1.com | subscriberUser@tenant1.com | local   | {{encTokenScopeName}}_local     |
 
   # An UNREGISTERED scope is granted verbatim rather than dropped or replaced by "default". Pinned because ~20
   # scenarios across the gateway and key-manager suites request "PRODUCTION"/"SANDBOX" — neither of which is a

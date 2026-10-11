@@ -18,7 +18,10 @@ package org.wso2.am.integration.cucumbertests.runners.block;
 
 import io.cucumber.testng.CucumberOptions;
 
-/** Isolated block runner for the real external-IdP authorization-code backend-JWT scenarios. */
+/**
+ * Runner for the FederatedUserJWTTestCase backend-JWT scenarios: password-grant profile claims and external OIDC
+ * authorization code.
+ */
 @CucumberOptions(
         features = {"src/test/resources/features/key-manager/federated_backend_jwt.feature"},
         glue = {"org.wso2.am.integration.cucumbertests.stepdefinitions"},

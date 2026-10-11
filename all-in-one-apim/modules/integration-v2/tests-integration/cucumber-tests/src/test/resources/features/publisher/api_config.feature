@@ -608,7 +608,7 @@ Feature: Publisher API Runtime & Common Configuration
       | publisherUser@tenant1.com |
 
   # Publisher-plane contract for BACKEND endpoint security (the management-plane half of the endpoint-security
-  # legacy suite — the gateway-injection half lives in gateway/security_enforcement). Ports the publisher-observable
+  # legacy suite — the gateway-injection half lives in gateway/endpoint_security). Ports the publisher-observable
   # assertions of AddEndPointSecurityPerTypeTestCase (create-path) + ChangeEndPointSecurityPerTypeTestCase
   # (update-path): on create/update the Publisher API stores per-type (production/sandbox) endpoint_security, echoes
   # back the non-secret fields (type, username / clientId, tokenUrl, enabled) and REDACTS the secret — the stored
@@ -684,7 +684,7 @@ Feature: Publisher API Runtime & Common Configuration
   # tokenUrl and the clientId, and REDACTS the clientSecret. Ports the publisher-observable assertions of
   # AddEndPointSecurityPerTypeTestCase#testAddEndpointSecurityForOauthForClientCredentialsGrantType (the clientId
   # is preserved, clientSecret comes back ""). Publisher-plane only — the gateway token-fetch/injection is proven
-  # separately in gateway/security_enforcement.
+  # separately in gateway/endpoint_security.
   @cap:publisher @feat:api-config @rule:endpoint-security @type:regression @legacy:AddEndPointSecurityPerTypeTestCase
   Scenario Outline: Creating an API with per-type OAUTH endpoint security round-trips the config and redacts the client secret as <actor>
     Given The system is ready and I have valid publisher access tokens as "<actor>"

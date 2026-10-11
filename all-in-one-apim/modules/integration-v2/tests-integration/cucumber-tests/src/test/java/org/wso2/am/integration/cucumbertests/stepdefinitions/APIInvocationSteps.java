@@ -1100,6 +1100,54 @@ public class APIInvocationSteps {
     }
 
     /**
+     * Combines the {@code in header} and {@code with request header} variants: the bearer token goes in the given
+     * CUSTOM authorization header (the container's {@code [apim.oauth_config] auth_header}) and one additional
+     * request header is sent alongside it, retrying until the expected status. No standard {@code Authorization}
+     * header is sent.
+     */
+    @When("I invoke the API at gateway context {string} with method {string} using access token {string} in header {string} and payload {string} with request header {string} set to {string} until response status code becomes {int} within {int} seconds")
+    public void invokeApiByContextInHeaderWithHeaderUntilStatus(String context, String httpMethod, String accessToken,
+                                                                String tokenHeaderName, String payload,
+                                                                String headerName, String headerValue,
+                                                                int expectedStatus, int timeoutSeconds)
+            throws Exception {
+
+        String resolvedContext = Utils.resolveContextPlaceholders(context);
+        invokeUntilStatus(resolvedContext, accessToken, expectedStatus, timeoutSeconds,
+                () -> invokeApiByContextInHeaderWithHeader(resolvedContext, httpMethod, accessToken, tokenHeaderName,
+                        payload, headerName, headerValue));
+    }
+
+    /**
+     * Single-request form of the custom-token-header plus additional-header invocation; publishes the response for
+     * the ordinary status/body assertions without retrying.
+     */
+    @When("I invoke the API once at gateway context {string} with method {string} using access token {string} in header {string} and payload {string} with request header {string} set to {string}")
+    public void invokeApiByContextOnceInHeaderWithHeader(String context, String httpMethod, String accessToken,
+                                                         String tokenHeaderName, String payload, String headerName,
+                                                         String headerValue) throws Exception {
+
+        invokeApiByContextInHeaderWithHeader(Utils.resolveContextPlaceholders(context), httpMethod, accessToken,
+                tokenHeaderName, payload, headerName, headerValue);
+    }
+
+    private HttpResponse invokeApiByContextInHeaderWithHeader(String resolvedContext, String httpMethod,
+                                                              String accessToken, String tokenHeaderName,
+                                                              String payload, String headerName, String headerValue)
+            throws IOException {
+
+        String actualAccessToken = TestContext.resolve(accessToken).toString();
+        String resolvedHeaderValue = Utils.resolveContextPlaceholders(headerValue);
+        String actualPayload = payload == null || payload.isEmpty() ? null : TestContext.resolve(payload).toString();
+        String endpointUrl = Utils.getBaseGatewayUrl()
+                + (resolvedContext.startsWith("/") ? "" : "/") + resolvedContext;
+        Map<String, String> headers = new HashMap<>();
+        headers.put(tokenHeaderName, "Bearer " + actualAccessToken);
+        headers.put(headerName, resolvedHeaderValue);
+        return execute(CurlOption.HttpMethod.valueOf(httpMethod.toUpperCase()), endpointUrl, headers, actualPayload);
+    }
+
+    /**
      * Polls the legacy JWT-revocation contract: an invocation may remain successful (200) while the revoke event
      * propagates, and eventually must be rejected (401). Any other completed status is a failure, matching the
      * legacy test's explicit handling of unexpected responses instead of silently retrying them until a later 401.

@@ -239,7 +239,7 @@ Feature: Key Manager API Key
     Then The response status code should be 200
     And The value of response field "name" should be "{{sandboxApiExpectedName}}"
     And The value of response field "version" should be "{{sandboxApiExpectedVersion}}"
-    And The value of response field "context" should be "{{sandboxApiExpectedContext}}"
+    And The value of response field "context" should be "<contextPrefix>{{sandboxApiExpectedContext}}"
     And I extract response field "context" and store it as "sandboxApiContext"
     When I deploy the API with id "sandboxApiId"
     Then The response status code should be 201
@@ -251,9 +251,9 @@ Feature: Key Manager API Key
     And The value of response field "name" should be "John"
 
     Examples:
-      | actor                     |
-      | publisherUser             |
-      | publisherUser@tenant1.com |
+      | actor                     | contextPrefix   |
+      | publisherUser             | /               |
+      | publisherUser@tenant1.com | /t/tenant1.com/ |
 
   # API-key Referer restriction: a key generated with a permittedReferer is enforced at the gateway against the
   # request's Referer header — a matching exact path is authorised (200), a non-matching one is forbidden (403),

@@ -47,7 +47,6 @@ public class StaticSynapseRouteSteps {
 
     private static final String SYNAPSE_NAMESPACE = "http://ws.apache.org/ns/synapse";
     private static final String CONFIG_NAMESPACE = "http://org.apache.synapse/xsd";
-    private static final String URL_MAPPING_ROUTE_NAME = "v2-urlmapping-static-route";
     private static final String LOCATION_HEADER_ROUTE_NAME = "v2-location-header-static-route";
     private static final String ROUTE_CONTEXT_KEY = "staticSynapseRouteContext";
     private static final String ROUTE_NAME_KEY = "staticSynapseRouteName";
@@ -55,13 +54,15 @@ public class StaticSynapseRouteSteps {
     @When("I install the legacy static URL-mapping Synapse route at context {string}")
     public void installLegacyStaticUrlMappingRoute(String context) throws Exception {
 
-        installRoute(context, URL_MAPPING_ROUTE_NAME, urlMappingRouteXml(context));
+        String routeName = urlMappingRouteName(context);
+        installRoute(context, routeName, urlMappingRouteXml(context, routeName));
     }
 
     @When("I install the legacy static Location-header Synapse route at context {string}")
     public void installLegacyStaticLocationHeaderRoute(String context) throws Exception {
 
-        installRoute(context, LOCATION_HEADER_ROUTE_NAME, locationHeaderRouteXml(context));
+        String routeName = locationHeaderRouteName(context);
+        installRoute(context, routeName, locationHeaderRouteXml(context, routeName));
     }
 
     private static void installRoute(String context, String routeName, String routeXml) throws Exception {
@@ -70,7 +71,7 @@ public class StaticSynapseRouteSteps {
         Assert.assertTrue(runtimeValue instanceof ApimRuntime,
                 "No APIM runtime is available for the static Synapse route installation");
         ApimRuntime runtime = (ApimRuntime) runtimeValue;
-        User admin = Identity.gatewayManagementAdmin();
+        User admin = Identity.actingTenantAdmin();
         String serviceUrl = runtime.getGatewayManagementHttpsUrl() + "services/ConfigServiceAdmin";
         String configuration = getConfiguration(serviceUrl, admin);
         Document document = parse(configuration);
@@ -99,7 +100,7 @@ public class StaticSynapseRouteSteps {
             Assert.assertTrue(runtimeValue instanceof ApimRuntime,
                     "No APIM runtime is available to remove the static Synapse route");
             ApimRuntime runtime = (ApimRuntime) runtimeValue;
-            User admin = Identity.gatewayManagementAdmin();
+            User admin = Identity.actingTenantAdmin();
             String serviceUrl = runtime.getGatewayManagementHttpsUrl() + "services/ConfigServiceAdmin";
             Document document = parse(getConfiguration(serviceUrl, admin));
             Element route = findRoute(document, routeContext);
@@ -126,10 +127,33 @@ public class StaticSynapseRouteSteps {
         return null;
     }
 
-    private static String urlMappingRouteXml(String context) {
+    private static String urlMappingRouteName(String context) {
 
-        return "<api xmlns=\"" + SYNAPSE_NAMESPACE + "\" name=\"" + URL_MAPPING_ROUTE_NAME
-                + "\" context=\"" + context + "\">"
+        if (context.startsWith("/t/")) {
+            int tenantDomainEnd = context.indexOf('/', "/t/".length());
+            Assert.assertTrue(tenantDomainEnd > "/t/".length(),
+                    "Tenant static route context has no tenant domain: " + context);
+            return "admin-AT-" + context.substring("/t/".length(), tenantDomainEnd) + "--urlmapping";
+        }
+        return "admin--urlmapping";
+    }
+
+    private static String locationHeaderRouteName(String context) {
+
+        if (context.startsWith("/t/")) {
+            int tenantDomainEnd = context.indexOf('/', "/t/".length());
+            Assert.assertTrue(tenantDomainEnd > "/t/".length(),
+                    "Tenant static route context has no tenant domain: " + context);
+            return "admin-AT-" + context.substring("/t/".length(), tenantDomainEnd) + "--"
+                    + LOCATION_HEADER_ROUTE_NAME;
+        }
+        return LOCATION_HEADER_ROUTE_NAME;
+    }
+
+    private static String urlMappingRouteXml(String context, String routeName) {
+
+        return "<api xmlns=\"" + SYNAPSE_NAMESPACE + "\" name=\"" + routeName
+                + "\" context=\"" + context + "\" version=\"1.0.0\" version-type=\"context\">"
                 + "<resource methods=\"GET\" uri-template=\"/test\">"
                 + "<inSequence><header name=\"To\" action=\"remove\"/>"
                 + "<property name=\"RESPONSE\" value=\"true\"/>"
@@ -141,13 +165,13 @@ public class StaticSynapseRouteSteps {
                 + "<send/></outSequence></resource></api>";
     }
 
-    private static String locationHeaderRouteXml(String context) {
+    private static String locationHeaderRouteXml(String context, String routeName) {
 
-        return "<api xmlns=\"" + SYNAPSE_NAMESPACE + "\" name=\"" + LOCATION_HEADER_ROUTE_NAME
+        return "<api xmlns=\"" + SYNAPSE_NAMESPACE + "\" name=\"" + routeName
                 + "\" context=\"" + context + "\">"
                 + "<resource methods=\"GET\" url-mapping=\"/*\"><inSequence>"
                 + "<property name=\"NO_ENTITY_BODY\" action=\"remove\" scope=\"axis2\"/>"
-                + "<payloadFactory><format><response xmlns=\"><value>Received Request</value></response></format>"
+                + "<payloadFactory><format><response xmlns=\"\"><value>Received Request</value></response></format>"
                 + "</payloadFactory><property name=\"RESPONSE\" value=\"true\" scope=\"default\" type=\"STRING\"/>"
                 + "<property name=\"HTTP_SC\" value=\"200\" scope=\"axis2\"/>"
                 + "<property name=\"Location\" value=\"http://google.lk/abc/domain\" scope=\"transport\"/>"

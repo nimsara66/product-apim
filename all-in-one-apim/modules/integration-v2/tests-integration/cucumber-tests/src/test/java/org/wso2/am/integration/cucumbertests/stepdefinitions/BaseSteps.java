@@ -498,6 +498,26 @@ public class BaseSteps {
     }
 
     /**
+     * Switches to a DevPortal consumer and prepares only the credentials needed for application operations.
+     * Reuses credentials already created earlier in the scenario, which is useful when a Publisher actor also
+     * owns the application, while allowing a distinct subscriber actor to own it when API ownership and
+     * application privileges differ.
+     */
+    @Given("I use DevPortal consumer {string}, preparing credentials if needed")
+    public void iUseDevportalConsumerPreparingCredentialsIfNeeded(String actorRef) throws Exception {
+
+        String resolvedActorRef = Utils.resolveContextPlaceholders(actorRef);
+        Identity.setActingActor(resolvedActorRef);
+        User actor = Identity.resolveActor(resolvedActorRef);
+        if (!TestContext.contains(Identity.dcrCredentialsKey(actor))) {
+            createDcrApplication(actor, resolvedActorRef);
+        }
+        if (!TestContext.contains(Identity.devportalTokenKey(actor))) {
+            mintDevportalToken(actor);
+        }
+    }
+
+    /**
      * Replaces a literal substring in a stored context value and writes it back. Used to resolve a server-side
      * template placeholder that the publisher API returns verbatim — e.g. a version-first API's context is
      * stored as {@code /{version}/ctx}, and the gateway invocation needs {@code /1.0.0/ctx}.

@@ -39,6 +39,7 @@ import org.wso2.am.integration.test.utils.Constants;
 import org.testcontainers.containers.Network;
 import org.wso2.am.testcontainers.DynamicApimContainer;
 import org.wso2.am.testcontainers.ApimRuntime;
+import org.wso2.am.testcontainers.CpuLimit;
 import org.wso2.am.testcontainers.DynamicISContainer;
 import org.wso2.am.testcontainers.DynamicPlatformGatewayContainer;
 import org.wso2.am.testcontainers.JacocoCoverage;
@@ -51,6 +52,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 
@@ -91,6 +93,13 @@ public class BlockLifecycleListener implements ITestListener {
     static final String PARAM_LIFECYCLE_LOCK = "lifecycleLock";
     private static final String LIFECYCLE_LOCK_KEY = "lifecycleLockPermit";
     private static final Map<String, Semaphore> LIFECYCLE_LOCKS = new ConcurrentHashMap<>();
+    /**
+     * Optional hard CPU cap for the block's APIM container, in CPUs (Docker {@code --cpus}; fractions allowed,
+     * e.g. {@code 1.5}). Absent or blank leaves the container uncapped. Only the APIM container is capped — the
+     * block's IS has its own {@link #PARAM_IS_CPU_LIMIT}; Solace, proxy and the shared backend are not capped. A
+     * malformed or non-positive value fails the block's boot.
+     */
+    static final String PARAM_APIM_CPU_LIMIT = "apimCpuLimit";
     static final String PARAM_TOML_OVERLAY = "tomlOverlayPath";
     /**
      * Optional path to a small feature-specific TOML overlay merged on top of the default {@code basic}
@@ -260,6 +269,12 @@ public class BlockLifecycleListener implements ITestListener {
      * across concurrent blocks — the old shared-singleton fail-fast is gone.
      */
     static final String PARAM_IS_TOML_EXTRA_OVERLAY = "isTomlExtraOverlayPath";
+    /**
+     * Optional hard CPU cap for the block's external IS container, in CPUs (Docker {@code --cpus}; fractions
+     * allowed). Absent or blank leaves IS uncapped. Valid only with {@link #PARAM_BOOT_EXTERNAL_IS}; a malformed,
+     * non-positive or IS-less value fails the block's boot.
+     */
+    static final String PARAM_IS_CPU_LIMIT = "isCpuLimit";
     /** Shared-scope key holding the host-mapped external IS base URL (for scenarios requesting a token from IS). */
     static final String IS_BASE_URL_KEY = "isBaseUrl";
 
@@ -363,9 +378,19 @@ public class BlockLifecycleListener implements ITestListener {
             // IS infrastructure only. Registering IS as a key manager is admin product behaviour and lives in
             // the features (see PARAM_BOOT_EXTERNAL_IS javadoc).
             boolean bootExternalIs = Boolean.parseBoolean(param(context, PARAM_BOOT_EXTERNAL_IS));
+            Optional<CpuLimit> apimCpuLimit = cpuLimit(context, label, PARAM_APIM_CPU_LIMIT);
+            Optional<CpuLimit> isCpuLimit = cpuLimit(context, label, PARAM_IS_CPU_LIMIT);
+            if (isCpuLimit.isPresent() && !bootExternalIs) {
+                throw new IllegalArgumentException("Block '" + label + "' sets " + PARAM_IS_CPU_LIMIT
+                        + " but does not set " + PARAM_BOOT_EXTERNAL_IS + "=true");
+            }
 
             container = createApimContainer(label, context, blockNetwork);
             configureServerFiles(context, container);
+            if (apimCpuLimit.isPresent()) {
+                container.withCpuLimit(apimCpuLimit.get());
+                logger.info("Block '" + label + "' caps its APIM container at " + apimCpuLimit.get());
+            }
             // Opt-in integration coverage: attach the JaCoCo agent before boot (see CoverageSupport).
             if (CoverageSupport.enabled()) {
                 container.withCoverage();
@@ -453,7 +478,7 @@ public class BlockLifecycleListener implements ITestListener {
             // APIM's truststore was already augmented above (before boot), so federated OIDC / JWKS /
             // introspection calls trust IS.
             if (bootExternalIs) {
-                bootExternalIdentityServer(label, param(context, PARAM_IS_TOML_EXTRA_OVERLAY),
+                bootExternalIdentityServer(label, param(context, PARAM_IS_TOML_EXTRA_OVERLAY), isCpuLimit,
                         (Network) TestContext.get(BLOCK_NETWORK_KEY));
             }
 
@@ -845,11 +870,12 @@ public class BlockLifecycleListener implements ITestListener {
      *
      * @param isTomlExtraOverlayPath module-relative path of an IS EXTRA overlay toml appended after the built-in
      *                               overlay, or {@code null}/blank for none
+     * @param cpuLimit               CPU cap for the IS container, or empty to leave it uncapped
      * @param blockNetwork           the block's private network the IS joins under the {@code wso2is} alias
      * @return the started IS container, for the caller to publish and later stop
      */
     private DynamicISContainer bootExternalIdentityServer(String label, String isTomlExtraOverlayPath,
-            Network blockNetwork) throws java.io.IOException {
+            Optional<CpuLimit> cpuLimit, Network blockNetwork) throws java.io.IOException {
 
         String extraContent = null;
         if (isTomlExtraOverlayPath != null && !isTomlExtraOverlayPath.isBlank()) {
@@ -858,6 +884,10 @@ public class BlockLifecycleListener implements ITestListener {
         }
         DynamicISContainer is = new DynamicISContainer(label, extraContent);
         is.withNetwork(blockNetwork).withNetworkAliases(DynamicISContainer.NETWORK_ALIAS);
+        if (cpuLimit.isPresent()) {
+            is.withCpuLimit(cpuLimit.get());
+            logger.info("Block '" + label + "' caps its external Identity Server container at " + cpuLimit.get());
+        }
         // Published BEFORE start so a start/readiness failure is still reachable by the boot-failure teardown.
         TestContext.setShared(IS_CONTAINER_KEY, is);
         is.start();
@@ -942,6 +972,16 @@ public class BlockLifecycleListener implements ITestListener {
     protected String emailUserOverlayContent() throws java.io.IOException {
         String moduleDir = ModulePathResolver.getModuleDir(BlockLifecycleListener.class);
         return Files.readString(Paths.get(moduleDir, EMAIL_USER_OVERLAY).normalize());
+    }
+
+    /** The block's CPU-limit parameter {@code name}, or empty when the block leaves that container uncapped. */
+    Optional<CpuLimit> cpuLimit(ITestContext context, String label, String name) {
+        try {
+            return CpuLimit.parse(param(context, name));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Block '" + label + "' has an invalid " + name + ": "
+                    + e.getMessage(), e);
+        }
     }
 
     protected String param(ITestContext context, String name) {

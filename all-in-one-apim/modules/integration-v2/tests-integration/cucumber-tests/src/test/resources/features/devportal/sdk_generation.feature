@@ -18,7 +18,7 @@ Feature: DevPortal Client SDK Generation
   Scenario Outline: Generate a client SDK in <language> for a published API as <actor>
     Given The system is ready and I have valid devportal access token as "<actor>"
     When I generate a client SDK in language "<language>" for API "<apiId>"
-    # The documented application/zip body, attachment header, and actual archive are checked for every language.
+    # The observed application/octet-stream response, attachment header, and actual ZIP archive are checked for every language.
     Then The generated SDK should be a non-empty ZIP attachment
 
     Examples:

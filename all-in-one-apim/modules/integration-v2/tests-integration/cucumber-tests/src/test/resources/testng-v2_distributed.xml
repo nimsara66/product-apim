@@ -95,8 +95,12 @@
         <parameter name="initBackend" value="true"/>
         <classes>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayRestInvocationRunner"/>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayRestEndpointRoutingRunner"/>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayRestRequestDispatchRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayGraphQLInvocationRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewaySecurityEnforcementRunner"/>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayEndpointSecurityRunner"/>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayCredentialEnforcementRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayCredentialTypeConfusionRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayBasicAuthSecurityRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayGraphQLScopeEnforcementRunner"/>
@@ -138,16 +142,27 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayRestArtifactsRunner"/>
         </classes>
     </test>
-    <!-- Keep conditional API-template and runtime SOAP-update parity tests isolated. The Gateway-only TOML overlay
-         removes only ConfigServiceAdmin from its deny-list; all other denied services remain disabled. -->
-    <test name="IntegrationV2-Distributed-Gateway-CustomHandler" parallel="classes" thread-count="1">
-        <parameter name="blockLabel" value="distributed-gateway-custom-handler"/>
+    <!-- Custom gateway handler, custom auth header, devportal application sharing, application attributes and backend
+         JWT claims share one overlay: the handler JAR and conditional velocity_template.xml, the deny-list minus
+         ConfigServiceAdmin, auth_header = "Test-Custom-Header" (every OAuth-token invocation in the block sends its
+         token there), application sharing, backend JWT generation and the declared application attributes. The
+         required "External Reference Id" attribute is carried by every application the block creates. Keep
+         GatewayCustomHandlerRunner last and sequential: it attaches a handler and installs static Synapse routes
+         through ConfigServiceAdmin. -->
+    <test name="IntegrationV2-Distributed-GatewayAuthAndApplicationConfig" parallel="classes" thread-count="1">
+        <parameter name="blockLabel" value="distributed-gateway-auth-app-config"/>
         <parameter name="initTenantUsers" value="true"/>
         <parameter name="initBackend" value="true"/>
-        <parameter name="tomlExtraOverlayPath.gateway" value="src/test/resources/artifacts/configFiles/customGatewayHandler/deployment.toml"/>
+        <parameter name="tomlExtraOverlayPath.cp" value="src/test/resources/artifacts/configFiles/gatewayAuthAndApplicationConfig/distributed-cp-overlay.toml"/>
+        <parameter name="tomlExtraOverlayPath.tm" value="src/test/resources/artifacts/configFiles/gatewayRestArtifacts/distributed-shared-encryption-overlay.toml"/>
+        <parameter name="tomlExtraOverlayPath.gateway" value="src/test/resources/artifacts/configFiles/gatewayAuthAndApplicationConfig/distributed-gateway-overlay.toml"/>
         <parameter name="serverFilesToCopy.cp" value="src/test/resources/artifacts/custom-handler/velocity_template.xml::repository/resources/api_templates/velocity_template.xml"/>
         <parameter name="serverFilesToCopy.gateway" value="src/test/resources/artifacts/custom-handler/CustomAPIAuthenticationHandler-1.0.0.jar::repository/components/lib/CustomAPIAuthenticationHandler-1.0.0.jar"/>
         <classes>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalApplicationAttributesRunner"/>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.KeyManagerBackendJwtRunner"/>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayCustomAuthHeaderRunner"/>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalApplicationSharingRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayCustomHandlerRunner"/>
         </classes>
     </test>
@@ -238,9 +253,10 @@
         <parameter name="initTenantUsers" value="true"/>
         <parameter name="initBackend" value="true"/>
         <classes>
-        <class name="org.wso2.am.integration.cucumbertests.runners.block.GovernanceRulesetsRunner"/>
-        <class name="org.wso2.am.integration.cucumbertests.runners.block.GovernancePoliciesRunner"/>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.GovernanceRulesetsPoliciesRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GovernanceComplianceRunner"/>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.GovernanceComplianceMcpVariantsRunner"/>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.GovernanceComplianceBlockingRunner"/>
         </classes>
     </test>
     <!-- Restart scenarios target shared components in distributed topology. They run sequentially; both CP and
@@ -261,6 +277,7 @@
         <class name="org.wso2.am.integration.cucumbertests.runners.block.ServerRestartSharedScopeRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.ServerRestartMultiProtocolRunner"/>
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayThrottlingRestartRunner"/>
+        <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayThrottlingRestartGatewayLimitsRunner"/>
         </classes>
     </test>
     <!-- Email-mode restart and tagged TokenAPITestCase issuance coverage use separate CP and Gateway overlays and
@@ -278,6 +295,7 @@
         <classes>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.KeyManagerTokenPersistenceRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayThrottlingRestartRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayThrottlingRestartGatewayLimitsRunner"/>
         </classes>
     </test>
     <test name="IntegrationV2-Distributed-OrganizationVisibility" parallel="classes" thread-count="1">
@@ -363,33 +381,8 @@
         <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayEndpointCertificateInvocationRunner"/>
         </classes>
     </test>
-    <!-- Custom auth is gateway-global and application sharing is CP-global. Keep both runners sequential on
-         this distributed block; unrelated distributed blocks remain parallel. -->
-    <test name="IntegrationV2-Distributed-CustomAuthAndAppSharing" parallel="classes" thread-count="1">
-        <parameter name="blockLabel" value="distributed-custom-auth-sharing"/>
-        <parameter name="initTenantUsers" value="true"/>
-        <parameter name="initBackend" value="true"/>
-        <parameter name="tomlExtraOverlayPath.cp" value="src/test/resources/artifacts/configFiles/customAuthHeaderAndAppSharing/deployment.toml"/>
-        <parameter name="tomlExtraOverlayPath.gateway" value="src/test/resources/artifacts/configFiles/customAuthHeaderAndAppSharing/deployment.toml"/>
-        <classes>
-        <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayCustomAuthHeaderRunner"/>
-        <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalApplicationSharingRunner"/>
-        </classes>
-    </test>
-    <test name="IntegrationV2-Distributed-ApplicationAttributes" parallel="classes" thread-count="1">
-        <parameter name="blockLabel" value="distributed-application-attributes"/>
-        <parameter name="initTenantUsers" value="true"/>
-        <parameter name="initBackend" value="true"/>
-        <parameter name="tomlExtraOverlayPath.cp" value="src/test/resources/artifacts/configFiles/applicationAttributes/deployment.toml"/>
-        <parameter name="tomlExtraOverlayPath.gateway" value="src/test/resources/artifacts/configFiles/applicationAttributes/deployment.toml"/>
-        <classes>
-        <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalApplicationAttributesRunner"/>
-        <class name="org.wso2.am.integration.cucumbertests.runners.block.KeyManagerBackendJwtRunner"/>
-        </classes>
-    </test>
     <test name="IntegrationV2-Distributed-FederatedBackendJwt" parallel="classes" thread-count="1">
         <parameter name="blockLabel" value="distributed-federated-backend-jwt"/>
-        <parameter name="lifecycleLock" value="browser-sso"/>
         <parameter name="initTenantUsers" value="true"/>
         <parameter name="initBackend" value="true"/>
         <parameter name="bootExternalIdentityServer" value="true"/>
@@ -404,7 +397,6 @@
          and persistence overlay isolated from the shared restart block. -->
     <test name="IntegrationV2-Distributed-FederatedBackendJwt-TokenPersistence" parallel="classes" thread-count="1">
         <parameter name="blockLabel" value="distributed-federated-backend-jwt-token-persistence"/>
-        <parameter name="lifecycleLock" value="browser-sso"/>
         <parameter name="initTenantUsers" value="true"/>
         <parameter name="initBackend" value="true"/>
         <parameter name="bootExternalIdentityServer" value="true"/>

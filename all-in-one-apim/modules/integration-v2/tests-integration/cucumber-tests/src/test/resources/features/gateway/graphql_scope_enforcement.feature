@@ -2,20 +2,18 @@
 Feature: Gateway GraphQL Operation-Level Security
 
   Ports the operation-level security checks from the legacy GraphqlServerRestartTestCase (functional concerns;
-  the legacy "restart" was incidental): (1) a shared scope attached to the `languages` QUERY operation is
+  the legacy "restart" was incidental): (1) an API-local scope attached to the `languages` QUERY operation is
   enforced — a token WITH it queries (200), one WITHOUT it is refused (403); (2) an operation with
   `authType=None` is invocable WITHOUT any token (200). Run in BOTH the super tenant and tenant1.com to prove
   operation-level security for least-privileged Publisher users (the tenant API is addressed by its full
-  /t/<tenant> context, and the shared scope is bound to the per-tenant Publisher role). Runs in the concurrent IntegrationV2-Gateway block
+  /t/<tenant> context, and the local scope is bound to the per-tenant Publisher role). Runs in the Gateway-B or distributed Gateway block
   (backend started). Teardown via the per-scenario cleanup hook.
 
   @cap:gateway @feat:graphql-invocation @type:regression @dep:publisher @legacy:GraphqlServerRestartTestCase
   Scenario Outline: A scope-gated GraphQL operation is enforced for Publisher <publisherActor> (setup by <actor>)
     Given The system is ready
     And I have valid access tokens as "<actor>"
-    When I create a new shared scope as "gqlScopeEnf"
-    Then The response status code should be 201
-    And I extract response field "name" and store it as "gqlScopeName"
+    When I generate a unique value and store it as "gqlScopeName"
 
     # Create the GraphQL API, register the scope on it, and gate the `languages` operation with it.
     And I put JSON payload from file "artifacts/payloads/create_apim_test_graphql_api.json" in context as "graphQLAPIPayload"
@@ -26,7 +24,7 @@ Feature: Gateway GraphQL Operation-Level Security
     And I extract response field "context" and store it as "gqlApiContext"
     When I update the "apis" resource "gqlApiId" and "gqlPayload" with configuration type "scopes" and value:
       """
-      [{"shared":true,"scope":{"name":"{{gqlScopeName}}","displayName":"{{gqlScopeName}}","description":"graphql scope enforcement","bindings":["Internal/publisher"]}}]
+      [{"shared":false,"scope":{"name":"{{gqlScopeName}}","displayName":"{{gqlScopeName}}","description":"graphql scope enforcement","bindings":["Internal/publisher"]}}]
       """
     Then The response status code should be 200
     When I retrieve the "apis" resource with id "gqlApiId"
@@ -36,6 +34,10 @@ Feature: Gateway GraphQL Operation-Level Security
       [{"target":"languages","verb":"QUERY","authType":"Application & Application User","throttlingPolicy":"Unlimited","scopes":["{{gqlScopeName}}"],"operationPolicies":{"request":[],"response":[],"fault":[]}},{"target":"language","verb":"QUERY","authType":"Application & Application User","throttlingPolicy":"Unlimited","scopes":[],"operationPolicies":{"request":[],"response":[],"fault":[]}}]
       """
     Then The response status code should be 200
+    When I retrieve the "apis" resource with id "gqlApiId"
+    Then The response status code should be 200
+    And The response field "scopes[?(@.scope.name=='{{gqlScopeName}}')].scope.bindings[*]" should be exactly the list "Internal/publisher"
+    And The response field "operations[?(@.target=='languages' && @.verb=='QUERY')].scopes[*]" should be exactly the list "{{gqlScopeName}}"
 
     When I put the following JSON payload in context as "gqlRevPayload"
     """
@@ -113,9 +115,7 @@ Feature: Gateway GraphQL Operation-Level Security
   Scenario Outline: A scope-gated GraphQL SUBSCRIPTION operation is enforced over graphql-ws (data with the scope, 4002 without) for <publisherActor> (setup by <actor>)
     Given The system is ready
     And I have valid access tokens as "<actor>"
-    When I create a new shared scope as "gqlSubScopeEnf"
-    Then The response status code should be 201
-    And I extract response field "name" and store it as "gqlSubScopeName"
+    When I generate a unique value and store it as "gqlSubScopeName"
 
     And I put JSON payload from file "artifacts/payloads/create_apim_graphql_subscription_api.json" in context as "gqlSubScopePayload"
     And I create a GraphQL API with schema file "artifacts/payloads/graphql_subscription_schema.graphql" and additional properties "gqlSubScopePayload" as "gqlSubScopeApiId"
@@ -125,7 +125,7 @@ Feature: Gateway GraphQL Operation-Level Security
     And I extract response field "context" and store it as "gqlSubScopeContext"
     When I update the "apis" resource "gqlSubScopeApiId" and "gqlSubScopePayloadDto" with configuration type "scopes" and value:
       """
-      [{"shared":true,"scope":{"name":"{{gqlSubScopeName}}","displayName":"{{gqlSubScopeName}}","description":"graphql subscription scope enforcement","bindings":["Internal/publisher"]}}]
+      [{"shared":false,"scope":{"name":"{{gqlSubScopeName}}","displayName":"{{gqlSubScopeName}}","description":"graphql subscription scope enforcement","bindings":["Internal/publisher"]}}]
       """
     Then The response status code should be 200
     # Gate ONLY liftStatusChange; trailStatusChange stays ungated so the difference is the scope, not the API.
@@ -136,6 +136,10 @@ Feature: Gateway GraphQL Operation-Level Security
       [{"target":"allLifts","verb":"QUERY","authType":"Application & Application User","throttlingPolicy":"Unlimited","scopes":[],"operationPolicies":{"request":[],"response":[],"fault":[]}},{"target":"Lift","verb":"QUERY","authType":"Application & Application User","throttlingPolicy":"Unlimited","scopes":[],"operationPolicies":{"request":[],"response":[],"fault":[]}},{"target":"setLiftStatus","verb":"MUTATION","authType":"Application & Application User","throttlingPolicy":"Unlimited","scopes":[],"operationPolicies":{"request":[],"response":[],"fault":[]}},{"target":"liftStatusChange","verb":"SUBSCRIPTION","authType":"Application & Application User","throttlingPolicy":"Unlimited","scopes":["{{gqlSubScopeName}}"],"operationPolicies":{"request":[],"response":[],"fault":[]}},{"target":"trailStatusChange","verb":"SUBSCRIPTION","authType":"Application & Application User","throttlingPolicy":"Unlimited","scopes":[],"operationPolicies":{"request":[],"response":[],"fault":[]}}]
       """
     Then The response status code should be 200
+    When I retrieve the "apis" resource with id "gqlSubScopeApiId"
+    Then The response status code should be 200
+    And The response field "scopes[?(@.scope.name=='{{gqlSubScopeName}}')].scope.bindings[*]" should be exactly the list "Internal/publisher"
+    And The response field "operations[?(@.target=='liftStatusChange' && @.verb=='SUBSCRIPTION')].scopes[*]" should be exactly the list "{{gqlSubScopeName}}"
 
     When I put the following JSON payload in context as "gqlSubScopeRevPayload"
     """

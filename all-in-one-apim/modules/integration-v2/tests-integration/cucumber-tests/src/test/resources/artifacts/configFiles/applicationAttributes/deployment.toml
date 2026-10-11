@@ -1,4 +1,6 @@
-# Feature-specific TOML overlay for the IntegrationV2-ApplicationAttributes block.
+# Feature-specific TOML overlay for the IntegrationV2-Distributed-FederatedBackendJwt block (CP and Gateway). The
+# same backend-JWT keys and application attributes are carried by the gatewayAuthAndApplicationConfig overlays and,
+# with an External Reference Id default, by the is7kmValidationModes overlay of IntegrationV2-Is7KeyManager.
 #
 # Merged ON TOP of the shared `basic` overlay (which is itself merged onto the product distribution
 # deployment.toml) via the block's `tomlExtraOverlayPath` parameter — so only the extra keys this feature
@@ -14,8 +16,8 @@
 #   - [apim.devportal] enable_empty_values_in_application_attributes = true : ports the config of the legacy
 #     JWTTestCase — with this flag on, an OPTIONAL application attribute left with an empty value still surfaces
 #     in the backend JWT's applicationAttributes claim (as ""). With the flag false (product default) the empty
-#     optional attribute is absent from the claim. This block checks the enabled/present side (see
-#     backend_jwt.feature); URLSafeJWTTestCase checks the disabled/absent side in its dedicated block.
+#     optional attribute is absent from the claim. The enabled/present side is checked by the backend-JWT
+#     features; URLSafeJWTTestCase checks the disabled/absent side in its dedicated block.
 
 [apim.jwt]
 enable = true

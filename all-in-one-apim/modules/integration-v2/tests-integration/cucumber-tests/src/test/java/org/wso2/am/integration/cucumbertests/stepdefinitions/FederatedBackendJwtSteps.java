@@ -16,15 +16,24 @@
 
 package org.wso2.am.integration.cucumbertests.stepdefinitions;
 
-import com.microsoft.playwright.PlaywrightException;
-import io.cucumber.java.After;
 import io.cucumber.java.en.And;
 import io.cucumber.java.en.When;
+import org.apache.http.Header;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 import org.json.JSONObject;
 import org.testng.Assert;
 import org.wso2.am.integration.cucumbertests.utils.IntegrationActors;
 import org.wso2.am.integration.cucumbertests.utils.Names;
-import org.wso2.am.integration.cucumbertests.utils.PlaywrightSsoClient;
 import org.wso2.am.integration.cucumbertests.utils.Requests;
 import org.wso2.am.integration.cucumbertests.utils.SsoProvisioner;
 import org.wso2.am.integration.cucumbertests.utils.TestContext;
@@ -32,15 +41,18 @@ import org.wso2.am.integration.cucumbertests.utils.Utils;
 import org.wso2.carbon.automation.test.utils.http.client.HttpResponse;
 import org.wso2.am.testcontainers.DistributedDynamicApimContainer;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Drives the real external OIDC authorization-code path used by FederatedUserJWTTestCase. */
 public class FederatedBackendJwtSteps {
 
-    private PlaywrightSsoClient browser;
+    /** Upper bound on redirects/form posts in one federated authorization; the real chain is about ten hops. */
+    private static final int MAX_AUTHORIZATION_HOPS = 25;
 
     @And("I register an external OIDC IdP for backend JWT in tenant {string}")
     public void registerExternalOidcIdp(String tenant) throws Exception {
@@ -61,6 +73,8 @@ public class FederatedBackendJwtSteps {
         String password = "FederatedJwt@123";
         String email = user + "@wso2test.com";
         SsoProvisioner.createIsFederatedUser(user, password, email, java.util.List.of("subscriber"), true);
+        // The IdP is left for block teardown: once the OAuth service provider references it, APIM refuses to delete
+        // it until that SP is removed, so the pair goes with the block's container.
         TestContext.set("fedJwtIdpName", idpName);
         TestContext.set("fedJwtUser", user);
         TestContext.set("fedJwtEmail", email);
@@ -93,20 +107,15 @@ public class FederatedBackendJwtSteps {
 
     @When("I obtain an OAuth authorization-code token through the external OIDC IdP")
     public void obtainFederatedAuthorizationCodeToken() throws Exception {
-        Object gateway = TestContext.get("baseGatewayUrl");
-        browser = new PlaywrightSsoClient(TestContext.get("baseUrl").toString(),
-                IntegrationActors.baseUrl(IntegrationActors.IS), gateway == null ? null : gateway.toString());
-
         String callback = TestContext.resolve("fedJwtCallback").toString();
         String consumerKey = TestContext.resolve("consumerKey").toString();
-        // Start the browser at the same internal authority used by APIM's own callback. Starting at the mapped host
-        // IP sets the APIM session cookie for that IP, then the external IdP returns to localhost/apim-cp without
-        // the cookie, so APIM cannot correlate the authorization state and sends the browser to retry.do.
+        // Start at the same internal authority APIM uses for its own callback, so the APIM session cookie set by
+        // the authorize leg is the one presented when the external IdP returns to APIM's /commonauth.
         String apimInternal = callback.substring(0, callback.indexOf("/services/Version"));
         String authorizeUrl = apimInternal + "/oauth2/authorize"
                 + "?response_type=code&client_id=" + Utils.urlEncode(consumerKey)
                 + "&redirect_uri=" + Utils.urlEncode(callback) + "&scope=openid";
-        String finalRedirect = browser.authorizeOAuthClientThroughExternalIs(authorizeUrl, callback,
+        String finalRedirect = authorizeThroughExternalIs(authorizeUrl, callback,
                 TestContext.resolve("fedJwtUser").toString(), TestContext.resolve("fedJwtPassword").toString());
         String code = Utils.queryParam(finalRedirect, "code");
         Assert.assertNotNull(code, "External OIDC authorization did not return a code: " + finalRedirect);
@@ -126,18 +135,145 @@ public class FederatedBackendJwtSteps {
         TestContext.set("tokenResponse", tokenResponse);
     }
 
-    @After
-    public void cleanupFederatedBackendJwt() throws Exception {
-        if (browser != null) {
-            try {
-                browser.close();
-            } catch (PlaywrightException ignored) {
-                // Preserve the test failure if the browser already stopped during an interrupted redirect.
+    /**
+     * Drives APIM's federated OIDC authorization-code flow headlessly, the way a browser would, and returns the final
+     * client redirect that carries the authorization code: APIM {@code /oauth2/authorize} redirects to the external
+     * Identity Server, the federated user signs in at the IS {@code /commonauth}, the IS returns its code to APIM's
+     * {@code /commonauth}, and APIM redirects to the client callback. A consent challenge from either server is
+     * approved.
+     *
+     * <p>The servers address each other by their INTERNAL authorities ({@code localhost:9443} / {@code apim-cp:9443}
+     * for APIM, {@code wso2is:9443} for IS). Every hop keeps its internal URL as the logical address and is sent to
+     * that server's host-mapped port. Cookies are kept per internal authority, as a browser keeps them per host:
+     * both mapped ports are {@code localhost}, and a port-agnostic cookie store would let the IS session cookies
+     * overwrite APIM's ({@code commonAuthId} is set by both).
+     *
+     * <p>Signing in twice fails the flow, so rejected credentials surface as a failure instead of looping.
+     */
+    private String authorizeThroughExternalIs(String authorizeUrl, String callbackUrl, String username,
+                                              String password) throws Exception {
+
+        Map<String, String> mappedBases = internalAuthorityBases();
+        Map<String, Map<String, String>> cookiesByAuthority = new HashMap<>();
+        String url = authorizeUrl;
+        String formBody = null;
+        boolean signedIn = false;
+        try (CloseableHttpClient http = noRedirectTrustAllClient()) {
+            for (int hop = 0; hop < MAX_AUTHORIZATION_HOPS; hop++) {
+                URI logical = URI.create(url);
+                String authority = logical.getRawAuthority();
+                String mappedBase = mappedBases.get(authority);
+                Assert.assertNotNull(mappedBase, "The federated authorization left the known servers at " + url);
+                String target = mappedBase + logical.getRawPath().replaceFirst("^/", "")
+                        + (logical.getRawQuery() == null ? "" : "?" + logical.getRawQuery());
+                Map<String, String> cookies = cookiesByAuthority.computeIfAbsent(authority, k -> new LinkedHashMap<>());
+
+                HttpUriRequest request;
+                if (formBody != null) {
+                    HttpPost post = new HttpPost(target);
+                    post.setHeader("Content-Type", "application/x-www-form-urlencoded");
+                    post.setEntity(new StringEntity(formBody, StandardCharsets.UTF_8));
+                    request = post;
+                } else {
+                    request = new HttpGet(target);
+                }
+                if (!cookies.isEmpty()) {
+                    request.setHeader("Cookie", String.join("; ", cookies.entrySet().stream()
+                            .map(e -> e.getKey() + "=" + e.getValue()).toList()));
+                }
+                int status;
+                String location;
+                String body;
+                try (CloseableHttpResponse response = http.execute(request)) {
+                    status = response.getStatusLine().getStatusCode();
+                    for (Header setCookie : response.getHeaders("Set-Cookie")) {
+                        storeCookie(cookies, setCookie.getValue());
+                    }
+                    Header locationHeader = response.getFirstHeader("Location");
+                    location = locationHeader == null ? null : locationHeader.getValue();
+                    body = response.getEntity() == null ? ""
+                            : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+                }
+                Assert.assertTrue(status >= 300 && status < 400 && location != null,
+                        "The federated authorization stopped at " + url + " with HTTP " + status + ": "
+                                + body.substring(0, Math.min(body.length(), 500)));
+
+                String next = logical.resolve(location).toString();
+                String error = Utils.queryParam(next, "error");
+                Assert.assertNull(error, "The federated authorization failed with error '" + error + "': "
+                        + Utils.queryParam(next, "error_description"));
+                if (next.startsWith(callbackUrl) && Utils.queryParam(next, "code") != null) {
+                    return next;
+                }
+
+                URI nextUri = URI.create(next);
+                formBody = null;
+                if (nextUri.getPath() != null && nextUri.getPath().endsWith("/login.do")) {
+                    Assert.assertEquals(nextUri.getRawAuthority(), "wso2is:9443",
+                            "Expected the external Identity Server login, but " + nextUri.getRawAuthority()
+                                    + " presented its own login page: " + next);
+                    Assert.assertFalse(signedIn, "The external Identity Server asked for the login again after the "
+                            + "federated user signed in (credentials rejected?): " + next);
+                    String sessionDataKey = Utils.queryParam(next, "sessionDataKey");
+                    Assert.assertNotNull(sessionDataKey, "No sessionDataKey on the external IS login: " + next);
+                    url = nextUri.resolve("/commonauth").toString();
+                    formBody = "username=" + Utils.urlEncode(username) + "&password=" + Utils.urlEncode(password)
+                            + "&tocommonauth=true&sessionDataKey=" + Utils.urlEncode(sessionDataKey);
+                    signedIn = true;
+                } else if (Utils.queryParam(next, "sessionDataKeyConsent") != null) {
+                    url = nextUri.resolve("/oauth2/authorize").toString();
+                    formBody = "consent=approve&hasApprovedAlways=false&sessionDataKeyConsent="
+                            + Utils.urlEncode(Utils.queryParam(next, "sessionDataKeyConsent"));
+                } else {
+                    url = next;
+                }
             }
-            browser = null;
         }
-        // IdPs are block-scoped: the isolated APIM container is discarded after this runner. Once the OAuth
-        // service provider references an IdP, APIM refuses to delete it until that SP is removed, so leave the
-        // pair together for block teardown rather than emitting a misleading cleanup failure.
+        throw new AssertionError("The federated authorization did not reach '" + callbackUrl + "' within "
+                + MAX_AUTHORIZATION_HOPS + " hops; last URL: " + url);
+    }
+
+    /** Maps each server's internal authority, and its host-mapped authority, to its host-mapped base URL. */
+    private static Map<String, String> internalAuthorityBases() {
+        String apimBase = TestContext.get("baseUrl").toString();
+        String isBase = IntegrationActors.baseUrl(IntegrationActors.IS);
+        Map<String, String> bases = new HashMap<>();
+        bases.put("localhost:9443", apimBase);
+        bases.put("wso2am:9443", apimBase);
+        bases.put("apim-cp:9443", apimBase);
+        bases.put("wso2is:9443", isBase);
+        bases.put(URI.create(apimBase).getRawAuthority(), apimBase);
+        bases.put(URI.create(isBase).getRawAuthority(), isBase);
+        return bases;
+    }
+
+    /** Applies one Set-Cookie header to a per-authority jar; an expired or emptied cookie is removed. */
+    private static void storeCookie(Map<String, String> cookies, String setCookie) {
+        String pair = setCookie.split(";", 2)[0].trim();
+        int eq = pair.indexOf('=');
+        if (eq <= 0) {
+            return;
+        }
+        String name = pair.substring(0, eq);
+        String value = pair.substring(eq + 1);
+        String attributes = setCookie.toLowerCase(java.util.Locale.ROOT);
+        if (value.isEmpty() || attributes.contains("max-age=0")) {
+            cookies.remove(name);
+        } else {
+            cookies.put(name, value);
+        }
+    }
+
+    /**
+     * Trust-all, no-hostname-verification client that follows no redirects and keeps no cookies of its own (the
+     * walk keeps them per internal authority). The shipped wso2carbon certificate is CN=localhost with no IP SAN.
+     */
+    private static CloseableHttpClient noRedirectTrustAllClient() throws Exception {
+        return HttpClients.custom()
+                .setSSLSocketFactory(new SSLConnectionSocketFactory(Utils.trustAllSslContext(),
+                        NoopHostnameVerifier.INSTANCE))
+                .disableCookieManagement()
+                .setDefaultRequestConfig(RequestConfig.custom().setRedirectsEnabled(false).build())
+                .build();
     }
 }

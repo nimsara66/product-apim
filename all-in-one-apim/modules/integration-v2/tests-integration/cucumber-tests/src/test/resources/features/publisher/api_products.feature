@@ -354,14 +354,19 @@ Feature: Publisher API Products
       | publisherUser@tenant1.com |
 
   # Legacy APIProductRevisionTestCase runs its revision lifecycle as an administrator against a product with two
-  # member APIs and an arbitrary UUID provider. Keep that fixture distinct from the owner-created product above:
-  # it protects admin authorization, multi-member revision snapshots, null-vhost undeploy, and restore fidelity.
+  # member APIs and an arbitrary provider that is not a provisioned user (legacy used a random UUID). Keep that
+  # fixture distinct from the owner-created product above: it protects admin authorization, multi-member revision
+  # snapshots, null-vhost undeploy, and restore fidelity. The provider is a static non-existent name built in the
+  # block's physical username form, so an email-username block reads the tenant row's provider as a tenant user
+  # rather than a super-tenant email username; a short name keeps the email-form, tenant-qualified provider within
+  # the publisher's 50-character provider limit.
   @cap:publisher @feat:revisions @type:regression @parity:api-product-revision-full-lifecycle @dep:publisher @legacy:APIProductRevisionTestCase
-  Scenario Outline: An admin manages revisions of a two-member API product with an arbitrary UUID provider as <actor>
+  Scenario Outline: An admin manages revisions of a two-member API product with an arbitrary non-existent provider as <actor>
     Given The system is ready and I have valid publisher access tokens as "<actor>"
     And I have created an api from "artifacts/payloads/create_apim_test_api.json" as "adminRevApiOneId" and deployed it
     And I have created an api from "artifacts/payloads/create_apim_test_api_two.json" as "adminRevApiTwoId" and deployed it
-    When I create an API product "${UNIQUE:AdminRevisionProduct}" with context "${UNIQUE:adminRevisionProductCtx}" and provider "<provider>" from APIs "adminRevApiOneId,adminRevApiTwoId" as "adminRevProductId"
+    And I store the physical username of unprovisioned user "<providerBase>" as "adminRevProvider"
+    When I create an API product "${UNIQUE:AdminRevisionProduct}" with context "${UNIQUE:adminRevisionProductCtx}" and provider "{{adminRevProvider}}<providerTenantSuffix>" from APIs "adminRevApiOneId,adminRevApiTwoId" as "adminRevProductId"
     Then The response status code should be 201
     And The create response of API product "adminRevProductId" should echo its name, context, version and requested provider for actor "<actor>"
     And The API product "adminRevProductId" read from the publisher should match its create response
@@ -398,9 +403,9 @@ Feature: Publisher API Products
     Then The response status code should be 200
 
     Examples:
-      | actor            | provider                                      |
-      | admin             | 6b3e6f6c-c324-4ac2-a107-759677570919          |
-      | admin@tenant1.com  | 901e00a1-9c62-4b13-8a9c-551d3ed4fc85@tenant1.com |
+      | actor             | providerBase      | providerTenantSuffix |
+      | admin             | arbitraryprovider |                      |
+      | admin@tenant1.com | arbitraryprovider | @tenant1.com         |
 
   @cap:publisher @feat:products @type:negative @dep:publisher @legacy:APIProductLifecycleTest
   Scenario Outline: A published API product with an active subscription cannot be deleted until it is retired as <actor>

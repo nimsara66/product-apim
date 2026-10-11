@@ -6,7 +6,10 @@ Feature: Backend JWT Claims
   routes to the header-reflecting backend (/reflect-headers) so the decoded assertion can be inspected. Runs
   in the backend-JWT-enabled block (shared with application attributes, whose overlay turns on backend JWT and
   declares a required application attribute — so applications here supply it). Ports JWTTestCase (default
-  app/API/subscriber claims). The dotted-username and user-profile-claim cases are ported separately.
+  app/API/subscriber claims) and its dotted-username cases; the user-profile-claim case of FederatedUserJWTTestCase is
+  in federated_backend_jwt.feature.
+  The block's gateway reads OAuth tokens from the custom `Test-Custom-Header` (`[apim.oauth_config] auth_header`), so
+  every OAuth-token invocation here sends its bearer token in that header; API-key invocations are unaffected.
 
   # Also contributes the backend application-name and cryptographic-signature assertions of URLSafeJWTTestCase.
   # URL-safe encoding and the JWT-token/password-grant inputs remain covered only by backend_jwt_urlsafe.feature.
@@ -51,7 +54,7 @@ Feature: Backend JWT Claims
     # X-JWT-Assertion. Decode it and assert the standard backend-JWT claims. A short claim suffix is resolved to
     # its dialect-qualified key (http://wso2.org/claims/<suffix>) and compared exactly, so each Examples row
     # asserts ITS OWN subscriber via <actor> rather than a value that is merely a substring of both.
-    When I invoke the API at gateway context "{{jwtApiContext}}/1.0.0/reflect-headers" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 60 seconds
+    When I invoke the API at gateway context "{{jwtApiContext}}/1.0.0/reflect-headers" with method "GET" using access token "generatedAccessToken" in header "Test-Custom-Header" and payload "" until response status code becomes 200 within 60 seconds
     Then The response status code should be 200
     And The reflected backend JWT should contain claim "keytype" with value "PRODUCTION"
     And The reflected backend JWT should contain claim "applicationname" with value "{{jwtAppName}}"
@@ -148,7 +151,7 @@ Feature: Backend JWT Claims
     # scenario, so the enduser/sub claims below are pinned against the token subject rather than a guessed literal.
     And I extract JWT claim "sub" from access token "generatedAccessToken" and store it as "acEndUserId"
 
-    When I invoke the API at gateway context "{{acApiContext}}/1.0.0/reflect-headers" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 60 seconds
+    When I invoke the API at gateway context "{{acApiContext}}/1.0.0/reflect-headers" with method "GET" using access token "generatedAccessToken" in header "Test-Custom-Header" and payload "" until response status code becomes 200 within 60 seconds
     Then The response status code should be 200
     # App/API/subscription claims are grant-invariant — identical to the client-credentials path above.
     And The reflected backend JWT should contain claim "keytype" with value "PRODUCTION"
@@ -252,7 +255,7 @@ Feature: Backend JWT Claims
     And The reflected backend JWT should contain claim "applicationname" with value "{{kAppName}}"
     And The reflected backend JWT should contain claim "apiname" with value "{{kApiName}}"
     And The reflected backend JWT should contain claim "version" with value "{{kApiVersion}}"
-    And The reflected backend JWT should contain claim "apicontext" with value "{{kApiContext}}"
+    And The reflected backend JWT should contain claim "apicontext" with value "{{kApiContext}}/{{kApiVersion}}"
     And The reflected backend JWT should contain claim "subscriber" with value "<actor>"
     And The reflected backend JWT should not contain claim "wrongclaim"
     # typ in the JOSE header declares the assertion is a JWT; the payload-claim assertions below are blind to it.
@@ -307,11 +310,12 @@ Feature: Backend JWT Claims
       ["api_key"]
       """
     Then The response status code should be 200
+    # The publisher stores an api_key-only scheme with its application-security-mandatory marker added.
     When I retrieve the "apis" resource with id "koApiId" until its security schemes equal the following within 180 seconds:
       """
-      ["api_key"]
+      ["api_key", "oauth_basic_auth_api_key_mandatory"]
       """
-    Then The response field "securityScheme[*]" should be exactly the list "api_key"
+    Then The response field "securityScheme[*]" should be exactly the list "api_key,oauth_basic_auth_api_key_mandatory"
     When I deploy the API with id "koApiId"
     Then The response status code should be 201
     And I wait until "apis" "koApiId" revision is deployed in the gateway
@@ -350,7 +354,7 @@ Feature: Backend JWT Claims
     And The reflected backend JWT should contain claim "keytype" with value "PRODUCTION"
     And The reflected backend JWT should contain claim "apiname" with value "{{koApiName}}"
     And The reflected backend JWT should contain claim "version" with value "{{koApiVersion}}"
-    And The reflected backend JWT should contain claim "apicontext" with value "{{koApiContext}}"
+    And The reflected backend JWT should contain claim "apicontext" with value "{{koApiContext}}/{{koApiVersion}}"
     And The reflected backend JWT should contain claim "applicationname" with value "{{koAppName}}"
     And The reflected backend JWT should contain claim "subscriber" with value "<actor>"
     And The reflected backend JWT should not contain claim "wrongclaim"
@@ -364,7 +368,7 @@ Feature: Backend JWT Claims
     And The reflected backend JWT should contain claim "keytype" with value "PRODUCTION"
     And The reflected backend JWT should contain claim "apiname" with value "{{koApiName}}"
     And The reflected backend JWT should contain claim "version" with value "{{koApiVersion}}"
-    And The reflected backend JWT should contain claim "apicontext" with value "{{koApiContext}}"
+    And The reflected backend JWT should contain claim "apicontext" with value "{{koApiContext}}/{{koApiVersion}}"
     And The reflected backend JWT should contain claim "applicationname" with value "{{koAppName}}"
     And The reflected backend JWT should contain claim "subscriber" with value "<actor>"
     And The reflected backend JWT should not contain claim "wrongclaim"
@@ -419,7 +423,7 @@ Feature: Backend JWT Claims
     And I request an access token for application id "createdAppId" using payload "eToken"
     Then The response status code should be 200
 
-    When I invoke the API at gateway context "{{eApiContext}}/1.0.0/reflect-headers" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 60 seconds
+    When I invoke the API at gateway context "{{eApiContext}}/1.0.0/reflect-headers" with method "GET" using access token "generatedAccessToken" in header "Test-Custom-Header" and payload "" until response status code becomes 200 within 60 seconds
     Then The response status code should be 200
     # enable_empty_values_in_application_attributes=true => the empty optional attribute is present as "".
     And The reflected backend JWT applicationAttributes claim should contain "Optional attribute" with an empty value
@@ -468,7 +472,7 @@ Feature: Backend JWT Claims
     When I act as "jwtdecode.user<suffix>"
     And I request an OAuth access token for the current user using password grant with scope ""
     Then The response status code should be 200
-    When I invoke the API at gateway context "{{dApiContext}}/1.0.0/reflect-headers" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 60 seconds
+    When I invoke the API at gateway context "{{dApiContext}}/1.0.0/reflect-headers" with method "GET" using access token "generatedAccessToken" in header "Test-Custom-Header" and payload "" until response status code becomes 200 within 60 seconds
     Then The response status code should be 200
     And The reflected backend JWT should contain claim "keytype" with value "PRODUCTION"
     # (The gateway masks the JWT subject/enduser to a pseudonymous UUID in 4.7.0, so the username is not asserted
@@ -480,7 +484,7 @@ Feature: Backend JWT Claims
     # the response IS stored for that claim to be read — the non-retrying exact-count step asserts the status
     # without publishing a response, which would silently leave the claim re-read against the FIRST call's. The
     # retry costs nothing here because the regression is deterministic: a poisoned cache fails every attempt.
-    When I invoke the API at gateway context "{{dApiContext}}/1.0.0/reflect-headers" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 60 seconds
+    When I invoke the API at gateway context "{{dApiContext}}/1.0.0/reflect-headers" with method "GET" using access token "generatedAccessToken" in header "Test-Custom-Header" and payload "" until response status code becomes 200 within 60 seconds
     Then The response status code should be 200
     And The reflected backend JWT should contain claim "keytype" with value "PRODUCTION"
 
@@ -589,81 +593,3 @@ Feature: Backend JWT Claims
       | tenant       | suffix       | owner                          |
       | carbon.super |              | jwtdecode.keyowner             |
       | tenant1.com  | @tenant1.com | jwtdecode.keyowner@tenant1.com |
-
-  # User-profile claims in the backend JWT: a resource owner's profile claims (givenname / lastname / mobile /
-  # organization), set on the user via setUserClaimValue, surface in the gateway-injected X-JWT-Assertion. Keep
-  # the two email-shaped usernames from FederatedUserJWTTestCase as distinct rows in each tenant; these are
-  # usernames containing @, not emailUserMode aliases. Actor keys deliberately differ from the stored usernames
-  # because Identity actor references use @tenant as their final delimiter.
-  @cap:key-manager @feat:backend-jwt @rule:user-profile-claims @type:regression @dep:gateway @legacy:JWTTestCase @legacy:FederatedUserJWTTestCase
-  Scenario Outline: The backend JWT carries the resource owner's profile claims for <username> in <tenant>
-    Given The system is ready
-    And I have valid access tokens as "admin<suffix>"
-    And I register the OIDC user-profile claim mappings and scope in tenant "<tenant>"
-    And I provision user "<username>" as actor "<actorKey>" with roles "Internal/subscriber" in tenant "<tenant>"
-    And I set the user claim "http://wso2.org/claims/givenname" to "first name <username>" for user "<username>" in tenant "<tenant>"
-    And I set the user claim "http://wso2.org/claims/lastname" to "last name <username>" for user "<username>" in tenant "<tenant>"
-    And I set the user claim "http://wso2.org/claims/mobile" to "94123456987" for user "<username>" in tenant "<tenant>"
-    And I set the user claim "http://wso2.org/claims/organization" to "ABC <username>" for user "<username>" in tenant "<tenant>"
-    And I have created an api from "artifacts/payloads/create_apim_reflect_api.json" as "upApiId" and deployed it
-    When I publish the "apis" resource with id "upApiId"
-    Then The lifecycle status of API "upApiId" should be "Published"
-    When I retrieve the "apis" resource with id "upApiId"
-    And I extract response field "context" and store it as "upApiContext"
-
-    When I put JSON payload from file "artifacts/payloads/create_apim_app_with_empty_attribute.json" in context as "upAppPayload"
-    And I set the field "tokenType" to "JWT" in the payload "upAppPayload"
-    And I create an application with payload "upAppPayload"
-    Then The response status code should be 201
-    When I retrieve the application with id "createdAppId"
-    And I extract response field "name" and store it as "upAppName"
-    When I put the following JSON payload in context as "upKeys"
-    """
-    {"keyType": "PRODUCTION", "grantTypesToBeSupported": ["client_credentials", "password"]}
-    """
-    And I generate client credentials for application id "createdAppId" with payload "upKeys"
-    Then The response status code should be 200
-    When I put the following JSON payload in context as "upSub"
-    """
-    {"applicationId": "{{applicationId}}", "apiId": "{{apiId}}", "throttlingPolicy": "Gold"}
-    """
-    And I subscribe to API "upApiId" using application "createdAppId" with payload "upSub" as "upSubId"
-    Then The response status code should be 201
-
-    # Configure the app's OAuth service provider to REQUEST the user-profile claims (the backend JWT only surfaces
-    # claims the SP requests). Must happen before the token is minted.
-    When I configure the service provider for consumer key "consumerKey" to request the user-profile claims in tenant "<tenant>"
-
-    # Mint a password-grant token (openid scope) whose resource owner is the claim-populated user, then invoke.
-    When I act as "<actorKey><suffix>"
-    And I request an OAuth access token for the current user using password grant with scope "openid profile"
-    Then The response status code should be 200
-    When I invoke the API at gateway context "{{upApiContext}}/1.0.0/reflect-headers" with method "GET" using access token "generatedAccessToken" and payload "" until response status code becomes 200 within 60 seconds
-    Then The response status code should be 200
-    And The reflected backend JWT should contain claim "iss" with value "wso2.org/products/am"
-    And The reflected backend JWT should contain claim "subscriber" with value "admin<suffix>"
-    And The reflected backend JWT should contain claim "applicationname" with value "{{upAppName}}"
-    And The reflected backend JWT should contain claim "applicationtier" with value "Unlimited"
-    And The reflected backend JWT should contain claim "keytype" with value "PRODUCTION"
-    And The reflected backend JWT header should contain "typ" with value "JWT"
-    And The reflected backend JWT should be signed with algorithm "RS256"
-    And The reflected backend JWT should be verifiably signed by the key the gateway JWKS endpoint publishes
-    And The reflected backend JWT should contain claim "givenname" with value "first name <username>"
-    And The reflected backend JWT should contain claim "lastname" with value "last name <username>"
-    And The reflected backend JWT should contain claim "mobile" with value "94123456987"
-    And The reflected backend JWT should contain claim "organization" with value "ABC <username>"
-    # Assert the whole map so missing defaults and unexpected extra attributes fail on this password-grant JWT.
-    And The reflected backend JWT applicationAttributes claim should exactly equal
-    """
-    {"External Reference Id":"c1237890","Optional attribute":"","Sandbox access required":"Yes","Production access required":"Yes"}
-    """
-    And The reflected backend JWT should not contain claim "wrongclaim"
-
-    Examples:
-      | tenant       | suffix       | username                     | actorKey       |
-      | carbon.super |              | subscriberUser2               | jwtClaimBare   |
-      | carbon.super |              | subscriberUser2@wso2.com      | jwtClaimWso2   |
-      | carbon.super |              | subscriberUser2@abc.com       | jwtClaimAbc    |
-      | tenant1.com  | @tenant1.com | subscriberUser2               | jwtClaimBare   |
-      | tenant1.com  | @tenant1.com | subscriberUser2@wso2.com      | jwtClaimWso2   |
-      | tenant1.com  | @tenant1.com | subscriberUser2@abc.com       | jwtClaimAbc    |

@@ -76,6 +76,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.IntStream;
 import java.util.zip.ZipFile;
 
@@ -138,8 +139,9 @@ public class ApplicationBaseSteps {
     }
 
     /**
-     * Asserts the documented DevPortal SDK response contract: HTTP 200 with a non-empty application/zip archive.
-     * Also checks Content-Disposition is present, preserving the legacy downloadable-attachment assertion.
+     * Asserts the observed DevPortal SDK response contract: HTTP 200 with a non-empty ZIP archive served as
+     * application/octet-stream. Also checks Content-Disposition is present, preserving the legacy
+     * downloadable-attachment assertion.
      */
     @Then("The generated SDK should be a non-empty ZIP attachment")
     public void theGeneratedSdkShouldBeANonEmptyZipAttachment() throws IOException {
@@ -152,8 +154,8 @@ public class ApplicationBaseSteps {
         String contentType = result.getContentType();
         Assert.assertNotNull(contentType, "SDK response has no Content-Type header");
         String mediaType = contentType.split(";", 2)[0].trim();
-        Assert.assertEquals(mediaType.toLowerCase(Locale.ROOT), "application/zip",
-                "SDK response is not the documented application/zip media type");
+        Assert.assertEquals(mediaType.toLowerCase(Locale.ROOT), "application/octet-stream",
+                "SDK response is not the observed application/octet-stream media type");
 
         String contentDisposition = result.getContentDisposition();
         Assert.assertTrue(contentDisposition != null && !contentDisposition.isBlank(),
@@ -3875,6 +3877,8 @@ public class ApplicationBaseSteps {
 
     /** Resident-KM redirect URI — matches the keygen callbackUrl registered in the token-issuance feature. */
     private static final String RESIDENT_AUTHZ_REDIRECT_URI = "http://localhost:8490/callback";
+    /** Redirect URI registered by the resident PKCE key-generation case; every OAuth leg must use this exact URI. */
+    private static final String RESIDENT_PKCE_REDIRECT_URI = "https://localhost:9443/store/";
 
     /**
      * Authorization_code grant against the RESIDENT key manager (APIM's own OAuth endpoints) as the acting
@@ -3885,6 +3889,122 @@ public class ApplicationBaseSteps {
         User actor = Identity.actingActor();
         authorizationCodeToken(Utils.getBaseUrl(), Utils.getAPIMTokenEndpointURL(Utils.getBaseUrl()),
                 RESIDENT_AUTHZ_REDIRECT_URI, actor.getUserName(), actor.getPassword(), scope, null);
+    }
+
+    /**
+     * Completes a resident-key-manager authorization-code flow using the PKCE settings under test. The browser
+     * leg performs the real authorize -> login -> consent redirects; the callback is captured rather than
+     * navigated, and the authorization code is exchanged with the matching verifier. Public-client mode omits
+     * HTTP Basic authentication and identifies the client with the OAuth-required {@code client_id} form field.
+     */
+    @When("I complete the resident authorization-code flow with PKCE method {string} and client authentication {string}")
+    public void iCompleteResidentAuthorizationCodeFlowWithPkce(String method, String clientAuthentication)
+            throws Exception {
+
+        String requestedMethod = method.trim().toLowerCase(Locale.ROOT);
+        Assert.assertTrue("s256".equals(requestedMethod) || "plain".equals(requestedMethod),
+                "Unsupported PKCE challenge method: " + method);
+        // OAuth's registered method token is case-sensitive: the standard name is exactly "S256".
+        String normalizedMethod = "s256".equals(requestedMethod) ? "S256" : "plain";
+        String normalizedClientAuthentication = clientAuthentication.trim().toLowerCase(Locale.ROOT);
+        Assert.assertTrue("secret".equals(normalizedClientAuthentication)
+                        || "public".equals(normalizedClientAuthentication),
+                "Unsupported client authentication mode: " + clientAuthentication);
+
+        String verifier = newPkceCodeVerifier();
+        String challenge = "plain".equals(normalizedMethod) ? verifier : pkceS256Challenge(verifier);
+        String key = TestContext.resolve("consumerKey").toString();
+        String base = Utils.getBaseUrl();
+        String authorizeUrl = base + "oauth2/authorize?response_type=code&client_id="
+                + Utils.urlEncode(key) + "&redirect_uri=" + Utils.urlEncode(RESIDENT_PKCE_REDIRECT_URI)
+                + "&code_challenge=" + Utils.urlEncode(challenge)
+                + "&code_challenge_method=" + Utils.urlEncode(normalizedMethod);
+
+        User actor = Identity.actingActor();
+        String granted;
+        try (CloseableHttpClient http = trustAllHttpClientWithCookies()) {
+            granted = authorizeThroughLoginAndConsent(http, base, authorizeUrl,
+                    actor.getUserName(), actor.getPassword());
+        }
+        String code = Utils.queryParam(granted, "code");
+        Assert.assertNotNull(code, "No authorization code in the resident PKCE redirect: " + granted);
+
+        String tokenForm = "grant_type=authorization_code&code=" + Utils.urlEncode(code)
+                + "&redirect_uri=" + Utils.urlEncode(RESIDENT_PKCE_REDIRECT_URI)
+                + "&code_verifier=" + Utils.urlEncode(verifier);
+        Map<String, String> headers;
+        if ("secret".equals(normalizedClientAuthentication)) {
+            headers = clientCredentialsHeader();
+        } else {
+            headers = new HashMap<>();
+            tokenForm += "&client_id=" + Utils.urlEncode(key);
+        }
+        HttpResponse response = Requests.post(Utils.getAPIMTokenEndpointURL(base), headers, tokenForm,
+                Constants.CONTENT_TYPES.APPLICATION_X_WWW_FORM_URLENCODED);
+        captureTokens(response);
+    }
+
+    /** A missing PKCE challenge must be rejected for an application whose generated key makes PKCE mandatory. */
+    @When("I send a resident authorization request without a PKCE challenge")
+    public void iSendResidentAuthorizationRequestWithoutPkce() throws Exception {
+
+        String key = TestContext.resolve("consumerKey").toString();
+        String authorizeUrl = Utils.getBaseUrl() + "oauth2/authorize?response_type=code&client_id="
+                + Utils.urlEncode(key) + "&redirect_uri=" + Utils.urlEncode(RESIDENT_PKCE_REDIRECT_URI);
+        recordResidentAuthorizationError(authorizeUrl, "mandatory-PKCE request without a challenge");
+    }
+
+    /**
+     * Probes whether a PKCE challenge method is accepted by the generated resident OAuth client. Used to prove
+     * that {@code pkceSupportPlain=false} rejects plain while the configured positive flow exercises supported
+     * methods.
+     */
+    @When("I send a resident authorization request with PKCE method {string}")
+    public void iSendResidentAuthorizationRequestWithPkceMethod(String method) throws Exception {
+
+        String requestedMethod = method.trim().toLowerCase(Locale.ROOT);
+        Assert.assertTrue("s256".equals(requestedMethod) || "plain".equals(requestedMethod),
+                "Unsupported PKCE challenge method: " + method);
+        String normalizedMethod = "s256".equals(requestedMethod) ? "S256" : "plain";
+        String verifier = newPkceCodeVerifier();
+        String challenge = "plain".equals(normalizedMethod) ? verifier : pkceS256Challenge(verifier);
+        String key = TestContext.resolve("consumerKey").toString();
+        String authorizeUrl = Utils.getBaseUrl() + "oauth2/authorize?response_type=code&client_id="
+                + Utils.urlEncode(key) + "&redirect_uri=" + Utils.urlEncode(RESIDENT_PKCE_REDIRECT_URI)
+                + "&code_challenge=" + Utils.urlEncode(challenge)
+                + "&code_challenge_method=" + Utils.urlEncode(normalizedMethod);
+        recordResidentAuthorizationError(authorizeUrl, "PKCE method '" + normalizedMethod + "'");
+    }
+
+    private void recordResidentAuthorizationError(String authorizeUrl, String description) throws Exception {
+
+        try (CloseableHttpClient http = trustAllHttpClientWithCookies()) {
+            BrowserResponse response = sendNoRedirect(http, "GET", authorizeUrl, null);
+            String location = response.firstValue("Location").orElse(null);
+            String errorCode = location == null ? null : Utils.queryParam(location, "oauthErrorCode");
+            if (errorCode == null && location != null) {
+                errorCode = Utils.queryParam(location, "error");
+            }
+            if (errorCode == null) {
+                try {
+                    errorCode = new JSONObject(response.body()).optString("error", null);
+                } catch (Exception ignored) {
+                    // A non-JSON response is still reported in the assertion below with its status and body.
+                }
+            }
+            Assert.assertNotNull(errorCode, "Expected OAuth rejection for " + description + ", but got HTTP "
+                    + response.statusCode() + ", Location=" + location + ", body=" + response.body());
+            TestContext.set("authorizeErrorCode", errorCode);
+            String errorMessage = location == null ? null : Utils.queryParam(location, "oauthErrorMsg");
+            TestContext.set("authorizeErrorMessage", errorMessage == null ? "" : errorMessage);
+        }
+    }
+
+    private static String newPkceCodeVerifier() {
+
+        byte[] verifierBytes = new byte[32];
+        new java.security.SecureRandom().nextBytes(verifierBytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(verifierBytes);
     }
 
     /**
@@ -4167,17 +4287,18 @@ public class ApplicationBaseSteps {
         JSONArray internalApplications = new JSONObject(internalResponse.getData()).optJSONArray("list");
         Assert.assertNotNull(internalApplications,
                 "APIM internal application lookup omitted its list: " + internalResponse.getData());
-        int matchedId = -1;
-        int matches = 0;
+        // The internal list returns one row per declared application attribute, so an application carrying
+        // attributes appears several times; every row for the UUID must name the same numeric application id.
+        Set<Integer> matchedIds = new TreeSet<>();
         for (int i = 0; i < internalApplications.length(); i++) {
             JSONObject internalApp = internalApplications.getJSONObject(i);
             if (appUuid.equals(internalApp.optString("uuid"))) {
-                matchedId = internalApp.optInt("id", -1);
-                matches++;
+                matchedIds.add(internalApp.optInt("id", -1));
             }
         }
-        Assert.assertEquals(matches, 1,
-                "Expected exactly one internal application row for UUID " + appUuid + ", found " + matches);
+        Assert.assertEquals(matchedIds.size(), 1,
+                "Expected exactly one numeric application id for UUID " + appUuid + ", found " + matchedIds);
+        int matchedId = matchedIds.iterator().next();
         Assert.assertTrue(matchedId > 0, "Internal application row has invalid numeric id " + matchedId);
 
         String signedKey = JwtTestUtils.buildLegacyJwtApiKey(Identity.actingActor().getUserName(),
@@ -4492,8 +4613,32 @@ public class ApplicationBaseSteps {
     public void iSetupApplicationSubscribeAndGetTokenWithPlan(String apiId, String plan, String subscriptionID)
             throws Exception {
 
+        setupApplicationSubscribeAndGetToken("artifacts/payloads/create_apim_test_app.json", apiId, plan,
+                subscriptionID);
+    }
+
+    /**
+     * Payload-file variant of the application-setup composite: creates the application from the given payload file
+     * instead of the default test application, then generates keys, subscribes on {@code Bronze}, and obtains an
+     * access token. Needed where the container declares a required application attribute that every application
+     * must carry.
+     *
+     * @param appPayloadFile application creation payload file (relative to the test resources)
+     * @param apiId          context key holding the API id
+     * @param subscriptionID context key to store the created subscription id under
+     */
+    @When("I have set up application from payload file {string} with keys, subscribed to API {string}, and obtained access token for {string}")
+    public void iSetupApplicationFromPayloadFileSubscribeAndGetToken(String appPayloadFile, String apiId,
+                                                                     String subscriptionID) throws Exception {
+
+        setupApplicationSubscribeAndGetToken(appPayloadFile, apiId, "Bronze", subscriptionID);
+    }
+
+    private void setupApplicationSubscribeAndGetToken(String appPayloadFile, String apiId, String plan,
+                                                      String subscriptionID) throws Exception {
+
         // create an application
-        baseSteps.putJsonPayloadFromFile("artifacts/payloads/create_apim_test_app.json", "<createAppPayload>");
+        baseSteps.putJsonPayloadFromFile(appPayloadFile, "<createAppPayload>");
         iCreateAnApplicationWithJsonPayload("<createAppPayload>");
         baseSteps.theResponseStatusCodeShouldBe(201);
 
@@ -5868,9 +6013,34 @@ public class ApplicationBaseSteps {
     public void iCreateApplicationSharedWithGroup(String name, String group, String idKey) throws IOException {
 
         JSONObject app = new JSONObject();
-        app.put("name", Utils.resolvePayloadPlaceholders(name));
         app.put("throttlingPolicy", "Unlimited");
         app.put("description", "Group-shared test application");
+        createApplicationSharedWithGroup(app, name, group, idKey);
+    }
+
+    /**
+     * Payload-file variant of {@link #iCreateApplicationSharedWithGroup}: the given file supplies the base
+     * application (e.g. a required application attribute), and the step sets its name, {@code tokenType} and
+     * {@code groups} exactly as the plain form does.
+     *
+     * @param name        application name (resolves {@code ${UNIQUE:...}})
+     * @param group       the group to share with (resolves {@code {{...}}})
+     * @param payloadFile base application payload file (relative to the test resources)
+     * @param idKey       context key to store the created application id under
+     */
+    @When("I create an application {string} shared with group {string} from payload file {string} as {string}")
+    public void iCreateApplicationSharedWithGroupFromPayloadFile(String name, String group, String payloadFile,
+                                                                 String idKey) throws IOException {
+
+        baseSteps.putJsonPayloadFromFile(payloadFile, "<groupSharedAppPayload>");
+        JSONObject app = new JSONObject(TestContext.resolve("<groupSharedAppPayload>").toString());
+        createApplicationSharedWithGroup(app, name, group, idKey);
+    }
+
+    private void createApplicationSharedWithGroup(JSONObject app, String name, String group, String idKey)
+            throws IOException {
+
+        app.put("name", Utils.resolvePayloadPlaceholders(name));
         app.put("tokenType", "JWT");
         app.put("groups", new JSONArray().put(Utils.resolveContextPlaceholders(group)));
 

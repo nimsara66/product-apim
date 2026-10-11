@@ -18,7 +18,7 @@ package org.wso2.am.integration.cucumbertests.runners.block;
 
 import io.cucumber.testng.CucumberOptions;
 
-/** Restart-specific throttle policy persistence and Gateway enforcement coverage. */
+/** Restart-specific throttle policy persistence and application-bandwidth Gateway enforcement coverage. */
 @CucumberOptions(
         features = {"src/test/resources/features/gateway/throttling_restart.feature"},
         glue = {"org.wso2.am.integration.cucumbertests.stepdefinitions"},

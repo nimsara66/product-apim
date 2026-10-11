@@ -47,7 +47,7 @@ Feature: Backend JWT URL-safe encoding
     # Same generator invariants as the standard-encoding feature — proving the claims survive the url-safe round trip.
     And The reflected backend JWT should contain claim "iss" with value "wso2.org/products/am"
     And The reflected backend JWT should contain claim "applicationtier" with value "Unlimited"
-    And The reflected backend JWT applicationAttributes claim should equal
+    And The reflected backend JWT applicationAttributes claim should exactly equal
     """
     {"Production access required":"Yes","Sandbox access required":"Yes"}
     """
@@ -76,7 +76,7 @@ Feature: Backend JWT URL-safe encoding
     And The reflected backend JWT should contain claim "subscriber" with value "<actor>"
     And The reflected backend JWT should contain claim "iss" with value "wso2.org/products/am"
     And The reflected backend JWT should contain claim "applicationtier" with value "Unlimited"
-    And The reflected backend JWT applicationAttributes claim should equal
+    And The reflected backend JWT applicationAttributes claim should exactly equal
     """
     {"Production access required":"Yes","Sandbox access required":"Yes"}
     """

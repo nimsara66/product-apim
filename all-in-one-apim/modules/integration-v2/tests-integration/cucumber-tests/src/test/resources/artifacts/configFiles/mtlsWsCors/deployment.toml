@@ -1,4 +1,4 @@
-# Extra overlay shared by the mutual-SSL, WebSocket-CORS, and global REST-CORS scenarios, merged on top of the
+# Extra overlay shared by the mutual-SSL, WebSocket-CORS, global REST-CORS and endpoint-certificate TLS scenarios, merged on top of the
 # shared `basic` overlay. The global CORS settings are deliberately confined to this isolated block; the default
 # REST-CORS contract is tested in a separate block with no overlay. The existing WebSocket assertions continue
 # to pin allowed.example.com, no-Origin, and evil.example.com behavior; localhost is added as another allowed
@@ -20,3 +20,19 @@ allow_methods = ["GET", "PUT", "POST", "DELETE", "PATCH", "OPTIONS"]
 allow_headers = ["authorization", "Access-Control-Allow-Origin", "Content-Type", "SOAPAction", "Authorization"]
 allow_credentials = true
 enable_validation_for_ws = true
+
+# --- Endpoint-certificate TLS invocation (500 -> upload -> 200 -> delete -> 500 against a self-signed backend).
+# This is the passthrough HTTPS SENDER (backend-facing) side, distinct from the listener read_interval above.
+# The sender re-reads its trust store every ssl_profile.interval (default 600000 ms) and the certificate reloader
+# writes an uploaded certificate into that trust store every certificate_reloader.period (default 600 s); both
+# are shortened so upload -> trust propagates in about a minute. enable_restart_from_api allows the endpoint
+# step's single gateway-restart recovery when the product drops the upload event. Same values as the
+# endpointCertificateReload overlay used by the distributed suite.
+[transport.passthru_https.sender.ssl_profile]
+interval = 30000
+
+[apim.certificate_reloader]
+period = "1m"
+
+[server]
+enable_restart_from_api = true

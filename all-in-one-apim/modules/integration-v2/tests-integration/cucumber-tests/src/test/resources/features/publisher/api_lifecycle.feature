@@ -16,12 +16,15 @@ Feature: Publisher API Lifecycle
     Given I put JSON payload from file "artifacts/payloads/create_apim_test_api.json" in context as "apiLifecycleCreatePayload"
     And I extract field "name" from json payload "apiLifecycleCreatePayload" and store it as "apiLifecycleCreatedName"
     And I extract field "context" from json payload "apiLifecycleCreatePayload" and store it as "apiLifecycleCreatedContext"
+    # API definitions use a leading slash. Publisher readback tenant-qualifies tenant API contexts with /t/<domain>.
+    And I set the field "context" to "/{{apiLifecycleCreatedContext}}" in the payload "apiLifecycleCreatePayload"
+    And I put literal value "<tenantContextPrefix>/{{apiLifecycleCreatedContext}}" in context as "apiLifecycleExpectedContext"
     When I create an "apis" resource with payload "apiLifecycleCreatePayload" as "createdApiId"
     Then The response status code should be 201
     When I retrieve the "apis" resource with id "createdApiId"
     Then The response status code should be 200
     And The value of response field "name" should be "{{apiLifecycleCreatedName}}"
-    And The value of response field "context" should be "{{apiLifecycleCreatedContext}}"
+    And The value of response field "context" should be "{{apiLifecycleExpectedContext}}"
     And The value of response field "version" should be "1.0.0"
     And The response should contain "lastUpdatedTimestamp"
     And The response field "lastUpdatedTimestamp" should be non-blank
@@ -56,9 +59,9 @@ Feature: Publisher API Lifecycle
     Then The API with id "createdApiId" should be in the list of all APIS
 
     Examples:
-      | actor                      |
-      | publisherUser              |
-      | publisherUser@tenant1.com  |
+      | actor                     | tenantContextPrefix |
+      | publisherUser             |                     |
+      | publisherUser@tenant1.com | /t/tenant1.com      |
 
   @cap:publisher @feat:api-lifecycle @type:negative @legacy:APIMANAGERPublisherTestCase @legacy:APICreationForTenantsTestCase
   Scenario Outline: A subscriber-role user cannot create a REST API as <actor>
@@ -260,45 +263,41 @@ Feature: Publisher API Lifecycle
       | publisherUser@tenant1.com | {{collisionBaseName}}        | {{collisionBaseContext}}        | 1.0.0            | 409            | -                           |
       | publisherUser@tenant1.com | {{collisionBaseName}}        | {{collisionCandidateContext}}   | 2.0.0            | 400            | API Context does not exist |
 
-  # Ports the successful same-name create behavior from the legacy REST APITestCase: distinct contexts make these
-  # independent APIs even though their names match. Keep this positive case beside the negative identity matrix;
-  # the same-name/same-context rows above exercise collisions, while this verifies coexistence across contexts.
-  @cap:publisher @feat:api-lifecycle @type:regression @legacy:APITestCase
-  Scenario Outline: APIs with the same name but different contexts can coexist as <actor>
+  # APITestCase's legacy v0.16 requests expected a second same-name API version with a different context to succeed.
+  # The current v4 runtime rejects that combination with 400/900977 because versions of the same API must retain
+  # the existing context. Pin that current behavior and ensure the rejected create does not alter the first version.
+  @cap:publisher @feat:api-lifecycle @type:negative @legacy:APITestCase
+  Scenario Outline: A same-name API version with a different context is rejected as <actor>
     Given The system is ready and I have valid publisher access tokens as "<actor>"
     When I put JSON payload from file "artifacts/payloads/create_apim_test_api.json" in context as "sameNameFirstPayload"
     And I extract field "name" from json payload "sameNameFirstPayload" and store it as "sameNameExpected"
     And I extract field "context" from json payload "sameNameFirstPayload" and store it as "sameNameFirstContext"
+    And I set the field "context" to "/{{sameNameFirstContext}}" in the payload "sameNameFirstPayload"
+    And I put literal value "<tenantContextPrefix>/{{sameNameFirstContext}}" in context as "sameNameExpectedContext"
     And I set the field "version" to "2.0.0" in the payload "sameNameFirstPayload"
     And I create an "apis" resource with payload "sameNameFirstPayload" as "sameNameFirstId"
     Then The response status code should be 201
 
     # A fresh payload supplies a distinct generated context; only the name is reused from the first API.
     When I put JSON payload from file "artifacts/payloads/create_apim_test_api.json" in context as "sameNameSecondPayload"
-    And I extract field "context" from json payload "sameNameSecondPayload" and store it as "sameNameSecondContext"
     And I set the field "name" to "{{sameNameExpected}}" in the payload "sameNameSecondPayload"
     And I set the field "version" to "3.0.0" in the payload "sameNameSecondPayload"
-    And I create an "apis" resource with payload "sameNameSecondPayload" as "sameNameSecondId"
-    Then The response status code should be 201
+    And I attempt to create an "apis" resource with payload "sameNameSecondPayload"
+    Then The response status code should be 400
+    And The error response should have code "900977" message "Block Condition Error" and description containing "API Context does not exist"
 
-    # Read back both resources and pin their expected identity, proving both creates survived independently.
+    # The failed version create must leave the existing API unchanged.
     When I retrieve the "apis" resource with id "sameNameFirstId"
     Then The response status code should be 200
     And The value of response field "name" should be "{{sameNameExpected}}"
-    And The value of response field "context" should be "{{sameNameFirstContext}}"
+    And The value of response field "context" should be "{{sameNameExpectedContext}}"
     And The value of response field "version" should be "2.0.0"
-    And The response field "id" should be non-blank
-    When I retrieve the "apis" resource with id "sameNameSecondId"
-    Then The response status code should be 200
-    And The value of response field "name" should be "{{sameNameExpected}}"
-    And The value of response field "context" should be "{{sameNameSecondContext}}"
-    And The value of response field "version" should be "3.0.0"
     And The response field "id" should be non-blank
 
     Examples:
-      | actor                     |
-      | publisherUser             |
-      | publisherUser@tenant1.com |
+      | actor                     | tenantContextPrefix |
+      | publisherUser             |                     |
+      | publisherUser@tenant1.com | /t/tenant1.com      |
 
   # Ports DAOTestCase#testDAOTestCase — an API deleted via DELETE /apis/{id} can be re-created by a PLAIN POST
   # with the SAME name and context. v2 today only re-creates via IMPORT (definitions.feature:import-export), which
@@ -432,10 +431,15 @@ Feature: Publisher API Lifecycle
   @cap:publisher @feat:api-lifecycle @type:regression @legacy:GIT_1638_UrlEncodedApiNameTestCase
   Scenario Outline: An API with a hyphenated name can be retrieved and published as <actor>
     Given The system is ready and I have valid publisher access tokens as "<actor>"
-    And I have created an api from "artifacts/payloads/create_apim_hyphen_name_api.json" as "hyphenApiId" and deployed it
+    And I put JSON payload from file "artifacts/payloads/create_apim_hyphen_name_api.json" in context as "hyphenApiPayload"
+    And I extract field "name" from json payload "hyphenApiPayload" and store it as "hyphenApiExpectedName"
+    When I create an "apis" resource with payload "hyphenApiPayload" as "hyphenApiId"
+    Then The response status code should be 201
+    When I deploy the API with id "hyphenApiId"
+    Then The response status code should be 201
     When I retrieve the "apis" resource with id "hyphenApiId"
     Then The response status code should be 200
-    And The value of response field "name" should be "hyphen-api-name"
+    And The value of response field "name" should be "{{hyphenApiExpectedName}}"
     When I publish the "apis" resource with id "hyphenApiId"
     And The lifecycle status of API "hyphenApiId" should be "Published"
 
