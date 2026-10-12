@@ -2,7 +2,7 @@
 Feature: Prototype API runtime, mock and visibility
 
   Ports PrototypedAPITestcase (+ APIM23/APIM24 devportal visibility): an API deployed as a prototype
-  (lifecycle action "Deploy as a Prototype", endpoint config implementation_status=prototyped) is invocable
+  (lifecycle action "Deploy as a Prototype", which sets lifeCycleStatus PROTOTYPED) is invocable
   at the gateway with a subscription token, is demoted back to CREATED (after which invocation without auth is
   rejected), supports inline OAS mock-implementation generation — whose generated script is then deployed and
   ANSWERS at the gateway with no real backend — and appears under the devportal's prototyped
