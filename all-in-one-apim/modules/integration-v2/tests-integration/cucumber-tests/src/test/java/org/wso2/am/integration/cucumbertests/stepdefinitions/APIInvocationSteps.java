@@ -92,6 +92,14 @@ public class APIInvocationSteps {
      * propagation window, which would read as "not throttled" for a timing reason rather than a product one.
      */
     private static final int THROTTLED_SSE_DELAY_MILLIS = 1000;
+    /**
+     * Read-stall bound for a gateway invocation made inside a {@link Utils#retryUntil} attempt. A request the
+     * gateway accepts but never answers then fails as a retriable {@link java.net.SocketTimeoutException} and the
+     * next attempt is sent, instead of the attempt holding until the gateway's own 180-second socket timeout closes
+     * the window. Twice the longest deliberate backend delay in the suite (a 30-second endpoint timeout); it bounds
+     * the gap between reads, so a progressing stream is unaffected.
+     */
+    private static final int RETRY_ATTEMPT_SOCKET_TIMEOUT_MILLIS = 60_000;
     /** Slack past a throttle window's expiry: covers the one-second, truncating resolution of the Date header. */
     private static final long THROTTLE_WINDOW_ROLLOVER_MARGIN_MILLIS = 2000L;
     private static final DateTimeFormatter THROTTLE_EXPIRY_FORMAT =
@@ -118,36 +126,46 @@ public class APIInvocationSteps {
 
         return Requests.execute(() -> {
             SimpleHTTPClient client = SimpleHTTPClient.getInstance();
-            if (rawGet) {
-                // GET with the client's URI normalization DISABLED, so a percent-encoded path segment reaches the
-                // gateway verbatim; method/payload/contentType are unused on this path.
-                return client.doGetRaw(endpointUrl, headers);
+            if (Utils.inRetryAttempt()) {
+                return client.withSocketTimeout(RETRY_ATTEMPT_SOCKET_TIMEOUT_MILLIS, () -> dispatch(client, method,
+                        endpointUrl, headers, payload, contentType, rawGet, socketTimeoutMillis));
             }
-            if (socketTimeoutMillis > 0) {
-                if (method != CurlOption.HttpMethod.GET) {
-                    throw new IllegalArgumentException("Per-request socket timeout currently supports GET only");
-                }
-                return client.doGetWithSocketTimeout(endpointUrl, headers, socketTimeoutMillis);
-            }
-            switch (method) {
-                case GET:
-                    return client.doGet(endpointUrl, headers);
-                case DELETE:
-                    return client.doDelete(endpointUrl, headers);
-                case POST:
-                    return client.doPost(endpointUrl, headers, payload, contentType);
-                case PUT:
-                    return client.doPut(endpointUrl, headers, payload, contentType);
-                case PATCH:
-                    return client.doPatch(endpointUrl, headers, payload, contentType);
-                case HEAD:
-                    return client.doHead(endpointUrl, headers);
-                case OPTIONS:
-                    return client.doOptions(endpointUrl, headers);
-                default:
-                    throw new IllegalArgumentException("Unsupported HTTP method for invocation: " + method);
-            }
+            return dispatch(client, method, endpointUrl, headers, payload, contentType, rawGet, socketTimeoutMillis);
         });
+    }
+
+    private static HttpResponse dispatch(SimpleHTTPClient client, CurlOption.HttpMethod method, String endpointUrl,
+                                         Map<String, String> headers, String payload, String contentType,
+                                         boolean rawGet, int socketTimeoutMillis) throws IOException {
+        if (rawGet) {
+            // GET with the client's URI normalization DISABLED, so a percent-encoded path segment reaches the
+            // gateway verbatim; method/payload/contentType are unused on this path.
+            return client.doGetRaw(endpointUrl, headers);
+        }
+        if (socketTimeoutMillis > 0) {
+            if (method != CurlOption.HttpMethod.GET) {
+                throw new IllegalArgumentException("Per-request socket timeout currently supports GET only");
+            }
+            return client.doGetWithSocketTimeout(endpointUrl, headers, socketTimeoutMillis);
+        }
+        switch (method) {
+            case GET:
+                return client.doGet(endpointUrl, headers);
+            case DELETE:
+                return client.doDelete(endpointUrl, headers);
+            case POST:
+                return client.doPost(endpointUrl, headers, payload, contentType);
+            case PUT:
+                return client.doPut(endpointUrl, headers, payload, contentType);
+            case PATCH:
+                return client.doPatch(endpointUrl, headers, payload, contentType);
+            case HEAD:
+                return client.doHead(endpointUrl, headers);
+            case OPTIONS:
+                return client.doOptions(endpointUrl, headers);
+            default:
+                throw new IllegalArgumentException("Unsupported HTTP method for invocation: " + method);
+        }
     }
 
     /**

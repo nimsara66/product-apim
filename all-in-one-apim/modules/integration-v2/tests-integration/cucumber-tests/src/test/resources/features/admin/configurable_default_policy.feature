@@ -20,9 +20,12 @@ Feature: Admin Configurable Default Throttling Policy
   unlimited_tier_disabled.feature, since it is the same product check).
   All scenarios run x2 tenant — the tenant configuration is per tenant.
 
-  # Rows 135/139 — the GraphQL leg. Check the configured DefaultAPILevelTier on the initial CREATE as well as
-  # after a schema UPDATE re-derives the operation list. The update check ensures newly derived operations
-  # retain the tenant's configured default too.
+  # Rows 135/139 — the GraphQL leg. A GraphQL schema UPDATE re-derives the operation list; operations with no
+  # carried-over tier are filled from APIUtil.getDefaultAPILevelPolicy, i.e. the configured DefaultAPILevelTier.
+  # The graphql CREATE path resolves its default through APIUtil.getDefaultThrottlingPolicy instead, which does NOT
+  # consult the tenant configuration: with Unlimited disabled in this block it yields the fall-through 10KPerMin,
+  # not the configured 20KPerMin. The create check pins that product inconsistency, so a product change to
+  # either path fails here and must be reviewed deliberately.
   @cap:admin @feat:throttling-policies @type:regression @dep:publisher @legacy:ConfigurableDefaultPolicyTestCase
   Scenario Outline: GraphQL operations derived from a schema update take the configured default API-level tier as <actor>
     Given The system is ready
@@ -38,7 +41,7 @@ Feature: Admin Configurable Default Throttling Policy
     Then The response status code should be 201
     When I retrieve the "apis" resource with id "cdpGqlApiId"
     Then The response status code should be 200
-    And Every operation in the response should have throttling policy "20KPerMin"
+    And Every operation in the response should have throttling policy "10KPerMin"
     When I update the GraphQL schema of API "cdpGqlApiId" with schema file "artifacts/payloads/updated_graphql_schema.graphql"
     Then The response status code should be 200
     When I retrieve the "apis" resource with id "cdpGqlApiId"

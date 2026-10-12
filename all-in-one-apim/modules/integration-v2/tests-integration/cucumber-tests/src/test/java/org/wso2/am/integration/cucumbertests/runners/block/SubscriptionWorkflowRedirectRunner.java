@@ -25,7 +25,9 @@ import org.wso2.am.integration.cucumbertests.stepdefinitions.WorkflowAdminSteps;
  * boot. Its feature selects that executor by writing an alternate workflow-extensions.xml into the governance
  * registry; {@link #restoreWorkflowExecutors()} undoes it once after the runner, even on failure. It shares the
  * thread-count=1 IntegrationV2-ApprovalWorkflow block with the other workflow-executor runners, each of which
- * flips and restores the same server-global configuration in its own AfterClass.
+ * flips and restores the same server-global configuration in its own AfterClass. It is listed first in that block:
+ * the product clears its workflow-executor cache before the write commits, so a configuration load still in flight
+ * from an earlier runner could keep the previous executor cached for the subscription this scenario asserts on.
  */
 @CucumberOptions(
         features = "src/test/resources/features/admin/workflow_subscription_http_redirect.feature",

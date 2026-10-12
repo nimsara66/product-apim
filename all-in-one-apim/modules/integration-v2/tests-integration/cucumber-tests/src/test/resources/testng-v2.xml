@@ -430,8 +430,8 @@
     <!-- =====================================================================================
          CONFIG-OVERLAY / SPECIAL blocks below.
         ===================================================================================== -->
-    <!-- Keep FederatedUserJwtTokenPersistenceRunner last: its IdP remains referenced until block teardown. -->
-    <test name="IntegrationV2-UnlimitedTierDisabled" parallel="classes" thread-count="2">
+    <!-- ConfigurableDefaultPolicyRunner mutates the shared tenant default-tier configuration. -->
+    <test name="IntegrationV2-UnlimitedTierDisabled" parallel="classes" thread-count="1">
         <parameter name="blockLabel" value="unlimited-tier-disabled"/>
         <parameter name="apimCpuLimit" value="1"/>
         <parameter name="initTenantUsers" value="true"/>
@@ -562,7 +562,7 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.block.NetworkAccessControlTenantConfRunner"/>
         </classes>
     </test>
-    <!-- Workflow runners mutate shared workflow configuration and restore it after each class. -->
+    <!-- Run the redirect runner first to avoid stale workflow-executor cache from earlier config writes. -->
     <test name="IntegrationV2-ApprovalWorkflow" parallel="classes" thread-count="1">
         <parameter name="blockLabel" value="approval-workflow"/>
         <parameter name="apimCpuLimit" value="1"/>
@@ -572,9 +572,9 @@
         <parameter name="tomlExtraOverlayPath" value="src/test/resources/artifacts/configFiles/approveWorkflowAllInOne/deployment.toml"/>
         <parameter name="serverFilesToCopy" value="src/test/resources/artifacts/configFiles/workflowHTTPRedirect/SubscriptionCreationCustomWorkflowExecutor-1.0.0.jar::repository/components/lib/SubscriptionCreationCustomWorkflowExecutor-1.0.0.jar"/>
         <classes>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.SubscriptionWorkflowRedirectRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.WorkflowApprovalRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.WorkflowWsApiStateChangeRunner"/>
-            <class name="org.wso2.am.integration.cucumbertests.runners.block.SubscriptionWorkflowRedirectRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayWebSocketProxyAuthRoutingRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.NetworkAccessControlAllowRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.NetworkAccessControlUrlAllowRunner"/>

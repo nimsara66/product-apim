@@ -31,6 +31,7 @@ import org.apache.http.client.methods.HttpOptions;
 import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
+import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.methods.RequestBuilder;
 import org.apache.http.config.Registry;
@@ -86,6 +87,13 @@ public class SimpleHTTPClient {
     private static final int GENERAL_ERROR_RETRIES = 3;
     private static final long GENERAL_ERROR_RETRY_WAIT_MS = 2000L;
 
+    private static final RequestConfig DEFAULT_REQUEST_CONFIG = RequestConfig.custom()
+            .setRedirectsEnabled(false) // Disable redirects
+            .build();
+
+    /** Read-stall bound applied to every request this thread sends inside {@link #withSocketTimeout}. */
+    private static final ThreadLocal<Integer> SCOPED_SOCKET_TIMEOUT = new ThreadLocal<>();
+
     private SimpleHTTPClient()  {
 
         try {
@@ -114,13 +122,9 @@ public class SimpleHTTPClient {
             connManager.setMaxTotal(1000);        // total max connections
             connManager.setDefaultMaxPerRoute(100);   // max connections per route
 
-            RequestConfig requestConfig = RequestConfig.custom()
-                    .setRedirectsEnabled(false) // Disable redirects
-                    .build();
-
             this.client = HttpClients.custom()
                     .setConnectionManager(connManager)
-                    .setDefaultRequestConfig(requestConfig)
+                    .setDefaultRequestConfig(DEFAULT_REQUEST_CONFIG)
                     .evictExpiredConnections()
                     .disableCookieManagement() // Disable sending or storing cookies
                     .build();
@@ -137,6 +141,51 @@ public class SimpleHTTPClient {
 
     public static SimpleHTTPClient getInstance() {
         return InstanceHolder.INSTANCE;
+    }
+
+    /** A call made inside a {@link #withSocketTimeout} scope. */
+    @FunctionalInterface
+    public interface ScopedCall<T> {
+        T call() throws IOException;
+    }
+
+    /**
+     * Runs {@code call} with every request it sends on this thread bounded by a socket read timeout: a response
+     * that stalls for {@code socketTimeoutMillis} between packets fails the request with a
+     * {@link java.net.SocketTimeoutException}. The bound is per read, not per request, so a slow but progressing
+     * response (a stream) is unaffected. Scopes nest; the innermost bound applies.
+     */
+    public <T> T withSocketTimeout(int socketTimeoutMillis, ScopedCall<T> call) throws IOException {
+        if (socketTimeoutMillis <= 0) {
+            throw new IllegalArgumentException("Socket timeout must be positive");
+        }
+        Integer enclosing = SCOPED_SOCKET_TIMEOUT.get();
+        SCOPED_SOCKET_TIMEOUT.set(socketTimeoutMillis);
+        try {
+            return call.call();
+        } finally {
+            if (enclosing == null) {
+                SCOPED_SOCKET_TIMEOUT.remove();
+            } else {
+                SCOPED_SOCKET_TIMEOUT.set(enclosing);
+            }
+        }
+    }
+
+    /**
+     * Executes {@code request} on the shared client, applying the thread's {@link #withSocketTimeout} bound unless
+     * the request already carries its own positive socket timeout (a timeout that is itself under test).
+     */
+    private CloseableHttpResponse send(HttpUriRequest request) throws IOException {
+        Integer scoped = SCOPED_SOCKET_TIMEOUT.get();
+        if (scoped != null && request instanceof HttpRequestBase) {
+            HttpRequestBase configurable = (HttpRequestBase) request;
+            RequestConfig base = configurable.getConfig() != null ? configurable.getConfig() : DEFAULT_REQUEST_CONFIG;
+            if (base.getSocketTimeout() <= 0) {
+                configurable.setConfig(RequestConfig.copy(base).setSocketTimeout(scoped).build());
+            }
+        }
+        return client.execute(request);
     }
 
     /** A deferred HTTP call (build request -> execute -> construct response), rebuilt fresh on each retry. */
@@ -221,7 +270,7 @@ public class SimpleHTTPClient {
         return withGeneralErrorRetry(() -> {
             HttpGet request = new HttpGet(url);
             setHeaders(headers, request);
-            try (CloseableHttpResponse response = client.execute(request)) {
+            try (CloseableHttpResponse response = send(request)) {
                 return constructResponse(response);
             }
         });
@@ -243,7 +292,7 @@ public class SimpleHTTPClient {
                 .setSocketTimeout(socketTimeoutMillis)
                 .build());
         setHeaders(headers, request);
-        try (CloseableHttpResponse response = client.execute(request)) {
+        try (CloseableHttpResponse response = send(request)) {
             return constructResponse(response);
         }
     }
@@ -258,7 +307,7 @@ public class SimpleHTTPClient {
             if (additionalHeaders != null) {
                 additionalHeaders.forEach(request::addHeader);
             }
-            try (CloseableHttpResponse response = client.execute(request)) {
+            try (CloseableHttpResponse response = send(request)) {
                 return constructResponse(response);
             }
         });
@@ -302,7 +351,7 @@ public class SimpleHTTPClient {
     private DownloadResult doGetToFileOnce(String url, Map<String, String> headers, String suffix) throws IOException {
         HttpGet request = new HttpGet(url);
         setHeaders(headers, request);
-        try (CloseableHttpResponse response = client.execute(request)) {
+        try (CloseableHttpResponse response = send(request)) {
             int code = response.getStatusLine().getStatusCode();
             org.apache.http.Header ct = response.getFirstHeader("Content-Type");
             org.apache.http.Header cd = response.getFirstHeader("Content-Disposition");
@@ -381,7 +430,7 @@ public class SimpleHTTPClient {
         return withGeneralErrorRetry(() -> {
             HttpHead request = new HttpHead(url);
             setHeaders(headers, request);
-            try (CloseableHttpResponse response = client.execute(request)) {
+            try (CloseableHttpResponse response = send(request)) {
                 return constructResponse(response);
             }
         });
@@ -403,7 +452,7 @@ public class SimpleHTTPClient {
         return withGeneralErrorRetry(() -> {
             HttpOptions request = new HttpOptions(url);
             setHeaders(headers, request);
-            try (CloseableHttpResponse response = client.execute(request)) {
+            try (CloseableHttpResponse response = send(request)) {
                 return constructResponse(response);
             }
         });
@@ -430,7 +479,7 @@ public class SimpleHTTPClient {
         HttpGet request = new HttpGet(url);
         request.setConfig(RequestConfig.custom().setNormalizeUri(false).build());
         setHeaders(headers, request);
-        try (CloseableHttpResponse response = client.execute(request)) {
+        try (CloseableHttpResponse response = send(request)) {
             return constructResponse(response);
         }
     }
@@ -464,7 +513,7 @@ public class SimpleHTTPClient {
 
         HttpUriRequest request = RequestBuilder.create(method.toUpperCase(Locale.ROOT)).setUri(url).build();
         setHeaders(headers, request);
-        try (CloseableHttpResponse response = client.execute(request)) {
+        try (CloseableHttpResponse response = send(request)) {
             List<String> values = new ArrayList<>();
             for (Header header : response.getHeaders(headerName)) {
                 values.add(header.getValue());
@@ -600,7 +649,7 @@ public class SimpleHTTPClient {
         return withGeneralErrorRetry(() -> {
             HttpDelete request = new HttpDelete(url);
             setHeaders(headers, request);
-            try (CloseableHttpResponse response = client.execute(request)) {
+            try (CloseableHttpResponse response = send(request)) {
                 return constructResponse(response);
             }
         });
@@ -630,7 +679,7 @@ public class SimpleHTTPClient {
                 request.setEntity(ent);
             }
 
-            try (CloseableHttpResponse response = client.execute(request)) {
+            try (CloseableHttpResponse response = send(request)) {
                 return constructResponse(response);
             }
         });
@@ -690,7 +739,7 @@ public class SimpleHTTPClient {
             HttpEntity multipartEntity = builder.build();
             request.setEntity(multipartEntity);
 
-            try (CloseableHttpResponse response = client.execute(request)) {
+            try (CloseableHttpResponse response = send(request)) {
                 return constructResponse(response);
             }
         });
@@ -762,7 +811,7 @@ public class SimpleHTTPClient {
         }
 
         request.setEntity(builder.build());
-        try (CloseableHttpResponse response = client.execute(request)) {
+        try (CloseableHttpResponse response = send(request)) {
             return constructResponse(response);
         }
     }
@@ -791,7 +840,7 @@ public class SimpleHTTPClient {
                 request.setEntity(ent);
             }
 
-            try (CloseableHttpResponse response = client.execute(request)) {
+            try (CloseableHttpResponse response = send(request)) {
                 return constructResponse(response);
             }
         });
@@ -849,7 +898,7 @@ public class SimpleHTTPClient {
             HttpEntity multipartEntity = builder.build();
             request.setEntity(multipartEntity);
 
-            try (CloseableHttpResponse response = client.execute(request)) {
+            try (CloseableHttpResponse response = send(request)) {
                 return constructResponse(response);
             }
         });
@@ -878,7 +927,7 @@ public class SimpleHTTPClient {
                 request.setEntity(ent);
             }
 
-            try (CloseableHttpResponse response = client.execute(request)) {
+            try (CloseableHttpResponse response = send(request)) {
                 return constructResponse(response);
             }
         });

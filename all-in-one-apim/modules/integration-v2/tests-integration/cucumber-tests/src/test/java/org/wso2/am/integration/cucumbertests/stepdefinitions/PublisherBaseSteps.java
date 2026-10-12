@@ -17,6 +17,7 @@
 
 package org.wso2.am.integration.cucumbertests.stepdefinitions;
 
+import io.cucumber.datatable.DataTable;
 import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
@@ -4520,6 +4521,43 @@ public class PublisherBaseSteps {
                     "Operation " + operation.optString("verb") + " " + operation.optString("target")
                             + " carries the wrong throttling policy; all operations: " + operations);
         }
+    }
+
+    /**
+     * Asserts that the API in the last (2xx) response has EXACTLY the operations of the table — no more, no fewer —
+     * and that each carries its listed throttling policy. For APIs whose operations legitimately carry different
+     * tiers (an explicitly declared tier next to a substituted default), where the all-operations form cannot apply.
+     * Reads back the shared {@code httpResponse}, so it follows a retrieve step.
+     *
+     * @param expected rows of {@code verb | target | throttlingPolicy}, header row included
+     */
+    @Then("The operations in the response should have exactly these throttling policies:")
+    public void operationsShouldHaveExactlyTheseThrottlingPolicies(DataTable expected) {
+
+        HttpResponse response = (HttpResponse) TestContext.get("httpResponse");
+        Assert.assertTrue(response != null && response.getResponseCode() >= 200 && response.getResponseCode() < 300
+                        && response.getData() != null && !response.getData().isBlank(),
+                "Expected a 2xx API response with a body to read operations from, but got: "
+                        + (response == null ? "null" : response.getResponseCode() + " / " + response.getData()));
+
+        JSONArray operations = new JSONObject(response.getData()).optJSONArray("operations");
+        Assert.assertNotNull(operations, "The API response carries no operations: " + response.getData());
+
+        Map<String, String> actualPolicies = new HashMap<>();
+        for (int i = 0; i < operations.length(); i++) {
+            JSONObject operation = operations.getJSONObject(i);
+            String key = operation.optString("verb") + " " + operation.optString("target");
+            Assert.assertNull(actualPolicies.put(key, operation.optString("throttlingPolicy", null)),
+                    "Operation " + key + " appears more than once; all operations: " + operations);
+        }
+        Map<String, String> expectedPolicies = new HashMap<>();
+        for (Map<String, String> row : expected.asMaps()) {
+            expectedPolicies.put(row.get("verb") + " " + row.get("target"),
+                    Utils.resolveContextPlaceholders(row.get("throttlingPolicy")));
+        }
+        Assert.assertEquals(actualPolicies, expectedPolicies,
+                "The API's operations or their throttling policies differ from the expected set; all operations: "
+                        + operations);
     }
 
     /** Retrieves the available publisher throttling policies for a policy level (subscription / api / application). */
