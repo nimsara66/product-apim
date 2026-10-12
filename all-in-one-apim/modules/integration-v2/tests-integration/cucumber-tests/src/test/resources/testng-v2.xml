@@ -411,9 +411,7 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.block.FederatedBackendJwtRunner"/>
         </classes>
     </test>
-    <!-- Multi-tenant broker SSO uses an isolated tenant-sync overlay and notification receiver. It shares the
-         browser-sso lifecycle lock with IntegrationV2-ExternalIdpConsoleSso, and sits mid-suite, far from that block,
-         so the lock is released long before the other is scheduled and never parks a suite thread waiting on it. -->
+    <!-- Shares the external-IS lifecycle lock with IntegrationV2-ExternalIdpConsoleSso. -->
     <test name="IntegrationV2-MultiTenantSso" parallel="classes" thread-count="1">
         <parameter name="blockLabel" value="mt-sso"/>
         <parameter name="apimCpuLimit" value="1"/>
@@ -507,7 +505,6 @@
         <classes>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.PublisherMandatoryPropertiesRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.DevPortalDeprecatedApiDiscoverabilityRunner"/>
-            <class name="org.wso2.am.integration.cucumbertests.runners.block.NetworkAccessControlUrlTenantAllowRunner"/>
         </classes>
     </test>
     <!-- Suppressing the Resident Key Manager breaks API creation. -->
@@ -544,12 +541,17 @@
             <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayWebSocketProxyNoMatchRunner"/>
         </classes>
     </test>
-    <!-- Run analytics first; keep logging runners sequential because they mutate and inspect server-global state. -->
+    <!-- Run analytics first; keep logging runners sequential because they mutate and inspect server-global state.
+         bootstrapThrottleData: ELK's throttling-fault scenario needs the Gateway throttleData JMS consumer, which can
+         fail to start polling on first boot; the bootstrap repairs the throttle-data registry hierarchy and, if the
+         pipeline is not ready, restarts the Gateway once (enable_restart_from_api is in this block's overlay). -->
     <test name="IntegrationV2-LoggingAndElkAnalytics" parallel="classes" thread-count="1">
         <parameter name="blockLabel" value="logging-elk-analytics"/>
         <parameter name="apimCpuLimit" value="1"/>
         <parameter name="initTenantUsers" value="true"/>
         <parameter name="initBackend" value="true"/>
+        <parameter name="bootstrapThrottleData" value="true"/>
+        <parameter name="throttleDataReadinessSeconds" value="180"/>
         <parameter name="initProxy" value="true"/>
         <parameter name="tomlExtraOverlayPath" value="src/test/resources/artifacts/configFiles/loggingElkAnalytics/deployment.toml"/>
         <classes>
@@ -585,11 +587,12 @@
         <parameter name="initCrossTenantPeer" value="true"/>
         <parameter name="initBackend" value="true"/>
         <parameter name="initProxy" value="true"/>
-        <parameter name="tomlExtraOverlayPath" value="src/test/resources/artifacts/configFiles/crossTenantSubWsProxyAuthWrongCreds/deployment.toml"/>
+        <parameter name="tomlExtraOverlayPath" value="src/test/resources/artifacts/configFiles/crossTenantSubAllInOne/deployment.toml"/>
         <classes>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.CrossTenantSubscriptionRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.CrossTenantInvocationRunner"/>
             <class name="org.wso2.am.integration.cucumbertests.runners.block.GatewayWebSocketProxyAuthWrongCredsRunner"/>
+            <class name="org.wso2.am.integration.cucumbertests.runners.block.NetworkAccessControlUrlTenantAllowRunner"/>
         </classes>
     </test>
     <!-- NewVersionNotificationRunner changes email delivery and tenant notification settings. -->

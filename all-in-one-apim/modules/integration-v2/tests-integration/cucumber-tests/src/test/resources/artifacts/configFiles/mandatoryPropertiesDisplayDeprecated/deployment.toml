@@ -1,5 +1,5 @@
-# Overlay for the IntegrationV2-MandatoryPropertiesAndDisplayDeprecated block: PublisherMandatoryPropertiesRunner,
-# DevPortalDeprecatedApiDiscoverabilityRunner and NetworkAccessControlUrlTenantAllowRunner, one runner at a time. Merged on top of the shared `basic` overlay.
+# Overlay for the IntegrationV2-MandatoryPropertiesAndDisplayDeprecated block: PublisherMandatoryPropertiesRunner and
+# DevPortalDeprecatedApiDiscoverabilityRunner, one runner at a time. Merged on top of the shared `basic` overlay.
 # The distributed suite keeps the two keys in separate blocks (mandatoryProperties/ and displayDeprecatedApis/).
 #
 # The two keys are mutually inert for these runners:
@@ -24,13 +24,3 @@ description = "Property Description"
 # distribution ships it false; the false direction is asserted in devportal/subscribe.feature. ---
 [apim.devportal]
 display_deprecated_apis = true
-
-# --- NetworkAccessControlUrlTenantAllowRunner (HostValidationTenantAllowModeTestCase): the access-control feature is
-# enabled but permissive at platform level; each scenario applies, then removes, a super-tenant allow policy. The
-# policy is read only by the publisher/admin URL-validation entry points (definition import, validate-endpoint,
-# key-manager creation, ...), which neither other runner here uses; the runners also run one at a time. ---
-# The platform policy is permissive (feature enabled, no mode/hosts), so nothing is blocked at the platform
-# level; each scenario applies a per-tenant NetworkSecurityAccessControl allow policy at runtime and asserts
-# that the tenant policy gates the publisher URL-validation entry points. Ports HostValidationTenantAllowMode.
-[server.network_security.access_control]
-block_private_network_access = false

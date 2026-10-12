@@ -50,10 +50,12 @@ proxy_password = "testproxypass"
 
 # ---------------------------------------------------------------------------------------------
 # NetworkAccessControlAllowRunner + NetworkAccessControlUrlAllowRunner (SafeRefResolutionTestCase allow-mode group,
-# HostValidationAllowModeTestCase). The policy is read only by the
-# publisher/admin URL-validation entry points (definition import and validation, swagger update, validate-endpoint,
-# the API-endpoints resource, archive import, MCP servers, key-manager creation and discovery). No other runner in
-# this block uses one of them; API create, publish, subscribe, key generation and gateway traffic are not gated.
+# HostValidationAllowModeTestCase). The policy gates every publisher/admin operation that takes a remote URL: API
+# create and update (the endpoint URLs), definition import and validation, swagger update, validate-endpoint, the
+# API-endpoints resource, archive import, MCP servers, and key-manager creation and discovery. Publish, subscribe,
+# key generation and gateway traffic are not gated. Every API the block's runners create points at nodebackend,
+# the one allow-listed host, so they pass; a runner whose API backend, definition reference or key-manager URL
+# names any other host is rejected in this block and must not be added to it.
 # ---------------------------------------------------------------------------------------------
 # mode="allow" with the in-network fixtures host allow-listed: a remote reference to
 # http://nodebackend:3026/... is permitted and actually fetched (the positive control), while any other

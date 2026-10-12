@@ -194,6 +194,11 @@ public class BlockLifecycleListener implements ITestListener {
     /** When true, repair the registry-backed throttle-data hierarchy and recover its event pipeline during boot. */
     static final String PARAM_BOOTSTRAP_THROTTLE_DATA = "bootstrapThrottleData";
     /**
+     * How long the throttle-data bootstrap watches the current start before deciding a recovery restart is needed. A
+     * healthy start returns as soon as it has been stable; only a start that never becomes ready uses the full window.
+     */
+    private static final int THROTTLE_DATA_OBSERVE_SECONDS = 180;
+    /**
      * When {@code true}, onStart boots {@link DynamicSolaceBroker} — a faked Solace connector control plane
      * (network alias {@code solaceshim}) plus a REAL PubSub+ broker (alias {@code solacebroker}) — BEFORE APIM,
      * because the block's toml declares a gateway environment whose {@code service_url} is
@@ -521,9 +526,12 @@ public class BlockLifecycleListener implements ITestListener {
     /**
      * Repairs the registry parent hierarchy before any block scenario can trigger a throttle-data subscription.
      * The product components start before the registry SOAP service is available, so repair is necessarily a
-     * post-boot bootstrap operation followed by a single, ordered component recovery when the first startup
-     * binding was rejected. Existing tests still assert the same enforcement responses; this only prepares the
-     * infrastructure they consume.
+     * post-boot bootstrap operation. The ordered component recovery (a graceful restart) runs only when the
+     * current start's throttle-data pipeline is not ready, which is what a rejected startup binding produces: its
+     * {@code REG_PATH}/subscription failure is newer than any consumer marker. A repaired registry alone does not
+     * trigger it, because the hierarchy is created on every fresh database while the binding normally succeeds.
+     * Existing tests still assert the same enforcement responses; this only prepares the infrastructure they
+     * consume.
      */
     private void bootstrapThrottleDataInfrastructure(ApimRuntime runtime, String label, boolean tenantUsersEnabled)
             throws Exception {
@@ -535,8 +543,10 @@ public class BlockLifecycleListener implements ITestListener {
                     Identity.resolveActor("admin@tenant1.com"));
         }
 
-        ThrottleDataReadiness.Result observed = ThrottleDataReadiness.inspect(runtime);
-        if (!repaired && observed.ready()) {
+        ThrottleDataReadiness.Result observed = ThrottleDataReadiness.await(runtime, THROTTLE_DATA_OBSERVE_SECONDS);
+        if (observed.ready()) {
+            logger.info("Throttle-data bootstrap for block '" + label + "': pipeline ready on the current start, no "
+                    + "component recovery needed (registry repaired=" + repaired + ")");
             return;
         }
 

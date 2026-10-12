@@ -34,6 +34,7 @@ Feature: Gateway Allowed-Scopes Enforcement
     Then The response status code should be 201
     When I publish the "apis" resource with id "allowedScopesApiId"
     Then The lifecycle status of API "allowedScopesApiId" should be "Published"
+    And the "apis" resource "allowedScopesApiId" should be live on the gateway, redeploying if propagation is lost
     When I retrieve the "apis" resource with id "allowedScopesApiId"
     And I extract response field "context" and store it as "apiContext"
 

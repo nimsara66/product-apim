@@ -21,7 +21,7 @@ import io.cucumber.testng.CucumberOptions;
 
 /**
  * Runner for the network access-control URL-gate tenant-policy tests - the port of HostValidationTenantAllowModeTestCase. Under a per-tenant allow policy every publisher/admin URL-validation entry point rejects a non-allow-listed host, an allow-listed host passes, and a second tenant is unaffected. Runs in the
- * IntegrationV2-MandatoryPropertiesAndDisplayDeprecated block, whose overlay enables the feature permissively.
+ * IntegrationV2-CrossTenantSubscription block, whose overlay enables the feature permissively.
  */
 @CucumberOptions(
         features = {

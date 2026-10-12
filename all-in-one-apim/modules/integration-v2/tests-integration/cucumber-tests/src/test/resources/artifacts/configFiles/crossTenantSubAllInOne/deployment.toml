@@ -1,5 +1,7 @@
-# All-in-one overlay for the IntegrationV2-CrossTenantSubscription block: the crossTenantSub/ keys plus the wsProxyAuthWrongCreds WebSocket proxy profile.
-# The distributed suite keeps using crossTenantSub/ and wsProxyAuthWrongCreds/ separately.
+# All-in-one overlay for the IntegrationV2-CrossTenantSubscription block: the crossTenantSub/ keys plus the
+# wsProxyAuthWrongCreds WebSocket proxy profile and the permissive network access-control platform policy for
+# NetworkAccessControlUrlTenantAllowRunner. The distributed suite keeps using crossTenantSub/ and
+# wsProxyAuthWrongCreds/ separately.
 #
 # Feature-specific TOML overlay for the IntegrationV2-CrossTenantSubscription block.
 #
@@ -36,3 +38,16 @@ proxy_host = "squid-proxy"
 proxy_port = 3129
 proxy_username = "wronguser"
 proxy_password = "wrongpass"
+
+# --- NetworkAccessControlUrlTenantAllowRunner (HostValidationTenantAllowModeTestCase): the access-control feature is
+# enabled but permissive at platform level; each scenario applies, then removes, a super-tenant allow policy. The
+# policy gates every publisher/admin operation that takes a remote URL, including API create and update and
+# key-manager creation, so while a scenario's policy is applied the other runners' super-tenant creates would be
+# rejected. The block runs one runner at a time and each scenario removes its policy, so no other runner's create
+# overlaps a policy window. This block has no required custom API property, so the runner's API-update scenarios
+# reach the access-control check. ---
+# The platform policy is permissive (feature enabled, no mode/hosts), so nothing is blocked at the platform
+# level; each scenario applies a per-tenant NetworkSecurityAccessControl allow policy at runtime and asserts
+# that the tenant policy gates the publisher URL-validation entry points. Ports HostValidationTenantAllowMode.
+[server.network_security.access_control]
+block_private_network_access = false
