@@ -63,12 +63,16 @@ public class SquidProxyServer {
 
     /** Both Squid instances together use a few percent of one core at peak (measured), so half a CPU is ample. */
     public static final CpuLimit CPU_LIMIT = CpuLimit.of(0.5);
-    private static final long MEMORY_LIMIT_BYTES = 50L * 1024 * 1024;
+    public static final long DISTRIBUTED_MEMORY_LIMIT_BYTES = 50L * 1024 * 1024;
 
     private final GenericContainer<?> container;
     private final String blockLabel;
 
     public SquidProxyServer(String blockLabel, Network network) {
+        this(blockLabel, network, null);
+    }
+
+    public SquidProxyServer(String blockLabel, Network network, Long memoryLimitBytes) {
         this.blockLabel = blockLabel;
         logger.info("Initializing SquidProxyServer for block '" + blockLabel + "'...");
         container = new GenericContainer<>(System.getProperty("squid.docker.image.name", "squid-proxy:latest"))
@@ -77,7 +81,9 @@ public class SquidProxyServer {
                 .withNetworkAliases("squid-proxy")
                 .withCreateContainerCmdModifier(cmd -> {
                     CPU_LIMIT.applyTo(cmd);
-                    cmd.getHostConfig().withMemory(MEMORY_LIMIT_BYTES).withMemorySwap(MEMORY_LIMIT_BYTES);
+                    if (memoryLimitBytes != null) {
+                        cmd.getHostConfig().withMemory(memoryLimitBytes).withMemorySwap(memoryLimitBytes);
+                    }
                 })
                 .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofMinutes(2)));
 
