@@ -213,6 +213,10 @@ with file/line annotations before building images. Component overlay/server-file
 Every product block declares `<parameter name="group" value="group1|group2"/>`, identical in both suites and
 balanced by CI block duration. `-Dapim.v2.test.groups=group1` runs only that group's blocks (CI runs each suite as
 two jobs); without the property the complete suite runs. A block without a group, or an unknown group, fails the run.
+`BlockTimelineListener` passively records each executed block's worker thread (lane), timings and TestNG runner
+results, including configuration/boot failures, in `target/block-timeline.json`. Timings are TestNG context intervals:
+bootstrap and test execution, before teardown callbacks. The always-run CI step `docs/devs/render_block_timeline.py`
+appends lane and runner diagrams to the job summary; a missing timeline produces a note and never changes the job result.
 JaCoCo collection is opt-in with `-Dapim.coverage=true`: the all-in-one lane dumps coverage per block and
 merges it into a suite report; distributed-lane coverage is not collected. See the coverage architecture doc.
 

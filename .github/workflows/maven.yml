@@ -377,6 +377,7 @@ jobs:
           name: integration-v2-reports-${{ matrix.id }}
           path: |
             all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/target/surefire-reports/**
+            all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/target/block-timeline.json
             all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/target/cucumber-report/**
             all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/target/logs/**
             all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/target/coverage/output/**
@@ -434,3 +435,9 @@ jobs:
         with:
           report_paths: 'all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/target/surefire-reports/TEST-*.xml'
           check_name: 'integration-v2 results (${{ matrix.id }})'
+      # The execution map is best effort, including jobs whose test JVM did not finish.
+      - name: Summarize v2 suite execution
+        if: always()
+        continue-on-error: true
+        working-directory: all-in-one-apim/modules/integration-v2
+        run: python3 docs/devs/render_block_timeline.py

@@ -8,6 +8,7 @@
         <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.DistributedLifecycleListener"/>
         <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockScopeListener"/>
         <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.CoverageAggregationListener"/>
+        <listener class-name="org.wso2.am.integration.cucumbertests.utils.listeners.BlockTimelineListener"/>
     </listeners>
     <!-- Each block's group selects the CI job that runs it (-Dapim.v2.test.groups); without the property every
          block runs. Both suites declare the same groups, balanced by CI block duration. -->
