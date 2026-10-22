@@ -210,6 +210,9 @@ adding it to the matching block in the other suite, or declaring a block-scoped 
 From `integration-v2`, run `python3 docs/devs/suite_alignment.py`. The standalone validator writes nothing;
 both CI build workflows run it and reject undeclared differences, unsupported selectors and stale ignores
 with file/line annotations before building images. Component overlay/server-file routing is topology-specific.
+Every product block declares `<parameter name="group" value="group1|group2"/>`, identical in both suites and
+balanced by CI block duration. `-Dapim.v2.test.groups=group1` runs only that group's blocks (CI runs each suite as
+two jobs); without the property the complete suite runs. A block without a group, or an unknown group, fails the run.
 JaCoCo collection is opt-in with `-Dapim.coverage=true`: the all-in-one lane dumps coverage per block and
 merges it into a suite report; distributed-lane coverage is not collected. See the coverage architecture doc.
 
